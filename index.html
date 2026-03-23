@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>🧠 Assistant Personnel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0c0a;
+      --surface:     #141210;
+      --surface2:    #1c1a16;
+      --surface3:    #22201b;
+      --border:      #2a2720;
+      --border2:     #38342b;
+      --accent:      #c8a96e;
+      --accent-dim:  rgba(200, 169, 110, 0.18);
+      --accent-fg:   #1a1510;
+      --text:        #e4dfd3;
+      --text-muted:  #7a7568;
+      --text-faint:  #44403a;
+      --success:     #7aad7a;
+      --error:       #c07878;
+      --info:        #7a9ab0;
+      --r:           10px;
+      --r-sm:        6px;
+    }
+
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      line-height: 1.6;
+      min-height: 100dvh;
+    }
+
+    /* Subtle noise texture overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.022;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* ── LAYOUT ─────────────────────────────────── */
+    #app {
+      max-width: 580px;
+      margin: 0 auto;
+      padding: 28px 16px 64px;
+    }
+
+    /* ── HEADER ─────────────────────────────────── */
+    .app-header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .app-header h1 {
+      font-family: 'Playfair Display', serif;
+      font-weight: 400;
+      font-size: clamp(1.35rem, 5vw, 1.65rem);
+      letter-spacing: 0.01em;
+      color: var(--text);
+    }
+
+    .app-header h1 .dot { color: var(--accent); }
+
+    .app-header .sub {
+      margin-top: 6px;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+
+    /* ── CARDS ──────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-head.no-border { border-bottom: none; }
+
+    .label {
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .card-body { padding: 16px; }
+
+    /* ── FIELDS ─────────────────────────────────── */
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+
+    .field > label {
+      display: block;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder { color: var(--text-faint); }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 140px;
+      line-height: 1.55;
+    }
+
+    .field textarea.tall { min-height: 300px; font-size: 0.75rem; }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 10px;
+    }
+
+    /* ── DATE BADGE ─────────────────────────────── */
+    .date-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      padding: 5px 13px;
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-bottom: 14px;
+      letter-spacing: 0.025em;
+    }
+
+    /* ── BUTTONS ────────────────────────────────── */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: var(--r);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 500;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+    }
+
+    .btn:active:not(:disabled) { transform: scale(0.985); }
+    .btn:disabled { opacity: 0.38; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-fg);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      opacity: 0.88;
+      box-shadow: 0 4px 20px rgba(200, 169, 110, 0.25);
+    }
+
+    .btn-validate {
+      background: rgba(122, 173, 122, 0.12);
+      color: var(--success);
+      border: 1px solid rgba(122, 173, 122, 0.28);
+    }
+
+    .btn-validate:hover:not(:disabled) {
+      background: rgba(122, 173, 122, 0.2);
+      opacity: 1;
+    }
+
+    .btn-ghost {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.07em;
+      cursor: pointer;
+      padding: 5px 9px;
+      border-radius: var(--r-sm);
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .btn-ghost:hover { color: var(--text); background: var(--surface2); }
+
+    .btn-sm {
+      padding: 10px;
+      font-size: 0.77rem;
+      border-radius: var(--r-sm);
+    }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      color: var(--text);
+      border-color: var(--border2);
+    }
+
+    /* ── STATUS BAR ─────────────────────────────── */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--r);
+      font-size: 0.82rem;
+      margin-bottom: 12px;
+      animation: fadeUp 0.2s ease;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .status-loading { background: rgba(122,154,176,0.1); border: 1px solid rgba(122,154,176,0.22); color: var(--info); }
+    .status-success { background: rgba(122,173,122,0.1); border: 1px solid rgba(122,173,122,0.22); color: var(--success); }
+    .status-error   { background: rgba(192,120,120,0.1); border: 1px solid rgba(192,120,120,0.22); color: var(--error); }
+
+    /* ── SPINNER ────────────────────────────────── */
+    .spinner {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── DIVIDER ────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 22px 0;
+    }
+
+    /* ── SAS HEADER ACCENT ──────────────────────── */
+    .sas-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .sas-hint {
+      font-size: 0.73rem;
+      color: var(--text-faint);
+      margin-bottom: 13px;
+      font-style: italic;
+    }
+
+    /* ── UTILITIES ──────────────────────────────── */
+    [hidden] { display: none !important; }
+
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+
+    /* ── FIELD HINT ─────────────────────────────── */
+    .field-hint {
+      margin-top: 5px;
+      font-size: 0.68rem;
+      color: var(--text-faint);
+      line-height: 1.4;
+    }
+
+    /* ── TOGGLE SWITCH ──────────────────────────── */
+    .toggle-wrap {
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      margin-top: 2px;
+    }
+
+    .toggle-wrap input { display: none; }
+
+    .toggle-track {
+      position: relative;
+      width: 38px;
+      height: 22px;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: 11px;
+      transition: background 0.2s, border-color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 14px;
+      height: 14px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle-wrap input:checked + .toggle-track {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+    }
+
+    .toggle-wrap input:checked + .toggle-track .toggle-thumb {
+      transform: translateX(16px);
+      background: var(--accent);
+    }
+
+    /* ── COST BAR ───────────────────────────────── */
+    .cost-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 9px 14px;
+      border-radius: var(--r-sm);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 0.72rem;
+      margin-bottom: 12px;
+      animation: fadeUp 0.2s ease;
+    }
+
+    .cost-label { color: var(--text-muted); }
+
+    .cost-amount {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .cost-amount.real { color: var(--success); }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══ HEADER ══════════════════════════════════════ -->
+  <header class="app-header">
+    <h1>🧠 Assistant Personnel<span class="dot">.</span></h1>
+    <p class="sub">Capture · Analyse · Archive</p>
+  </header>
+
+  <!-- ══ CONFIGURATION ═══════════════════════════════ -->
+  <div class="card">
+    <div class="card-head">
+      <span class="label">Configuration</span>
+      <button class="btn-ghost" id="config-toggle">⚙️ Afficher ▾</button>
+    </div>
+    <div id="config-panel" hidden>
+      <div class="card-body">
+        <div class="field">
+          <label>Clé API Anthropic</label>
+          <input type="password" id="cfg-anthropic-key" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Modèle Anthropic</label>
+            <input type="text" id="cfg-anthropic-model" placeholder="claude-sonnet-4-6" spellcheck="false">
+          </div>
+          <div class="field" style="flex:0 0 auto; min-width:0;">
+            <label>Réflexion</label>
+            <label class="toggle-wrap">
+              <input type="checkbox" id="cfg-thinking-toggle">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
+        </div>
+        <div class="field" id="thinking-budget-field" hidden>
+          <label>Budget tokens réflexion</label>
+          <input type="number" id="cfg-thinking-budget" placeholder="8000" min="1024" max="32000" step="1024">
+        </div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0;">
+        <div class="field">
+          <label>Token GitHub</label>
+          <input type="password" id="cfg-github-token" placeholder="ghp_…" autocomplete="off" spellcheck="false">
+          <p class="field-hint">Repo privé ✓ — la page est protégée par ton auth GitHub. Personne d'autre ne peut pousser vers ton fichier MD.</p>
+        </div>
+        <div class="field">
+          <label>Repo GitHub (propriétaire/repo)</label>
+          <input type="text" id="cfg-github-repo" placeholder="damien/assistant-perso" spellcheck="false">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Chemin du fichier Markdown</label>
+            <input type="text" id="cfg-github-file" placeholder="notes/master.md" spellcheck="false">
+          </div>
+          <div class="field">
+            <label>Branche</label>
+            <input type="text" id="cfg-github-branch" placeholder="main" spellcheck="false">
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-secondary btn-sm" id="config-save">Sauvegarder</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ NOTE BRUTE ═══════════════════════════════════ -->
+  <div class="card">
+    <div class="card-head no-border">
+      <span class="label">Note brute</span>
+    </div>
+    <div class="card-body">
+      <div class="date-badge">📅 <span id="date-display"></span></div>
+      <div class="field">
+        <textarea
+          id="note-input"
+          placeholder="Colle ou dicte ta note ici — VoiceClip, texte libre, liste brute, peu importe le format…"
+        ></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STATUS ════════════════════════════════════════ -->
+  <div id="status-bar" hidden></div>
+
+  <!-- ══ COÛT ══════════════════════════════════════════ -->
+  <div id="cost-bar" hidden></div>
+
+  <!-- ══ BOUTON ANALYSER ══════════════════════════════ -->
+  <button class="btn btn-primary" id="analyze-btn">Analyser la note →</button>
+
+  <!-- ══ SAS DE VALIDATION ════════════════════════════ -->
+  <div id="sas-section" hidden>
+    <hr class="divider">
+
+    <div class="card">
+      <div class="card-head">
+        <span class="label">Sas de validation</span>
+        <span class="sas-dot"></span>
+      </div>
+      <div class="card-body">
+        <p class="sas-hint">Éditable — vérifie et corrige avant d'envoyer vers GitHub.</p>
+        <div class="field">
+          <textarea id="sas-content" class="tall"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-validate" id="validate-btn">✓ Valider → Envoyer vers GitHub</button>
+  </div>
+
+</div><!-- /#app -->
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════ */
+const S = {
+  fileContent : null,   // full markdown from GitHub
+  fileSha     : null,   // GitHub file SHA (needed for PUT)
+  contextDump : null,   // extracted 3 sections for prompt
+};
+
+/* ═══════════════════════════════════════════════════════
+   CONFIG — localStorage
+═══════════════════════════════════════════════════════ */
+const DEFAULTS = {
+  anthropicKey    : '',
+  anthropicModel  : 'claude-sonnet-4-6',
+  thinkingEnabled : false,
+  thinkingBudget  : 8000,
+  githubToken     : '',
+  githubRepo      : '',
+  githubFile      : '',
+  githubBranch    : 'main',
+};
+
+/* Tarifs Sonnet 4.6 — $3 input / $15 output par MTok */
+const PRICING = { input: 3 / 1e6, output: 15 / 1e6 };
+
+function estimateTokens(str) { return Math.ceil(str.length / 4); }
+function fmtCost(usd) { return usd < 0.01 ? `$${(usd * 100).toFixed(3)}¢` : `$${usd.toFixed(4)}`; }
+
+function loadCfg() {
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ap_cfg') || '{}') }; }
+  catch { return { ...DEFAULTS }; }
+}
+
+function saveCfg(cfg) {
+  localStorage.setItem('ap_cfg', JSON.stringify(cfg));
+}
+
+function readCfgFromUI() {
+  return {
+    anthropicKey    : $('cfg-anthropic-key').value.trim(),
+    anthropicModel  : $('cfg-anthropic-model').value.trim() || DEFAULTS.anthropicModel,
+    thinkingEnabled : $('cfg-thinking-toggle').checked,
+    thinkingBudget  : parseInt($('cfg-thinking-budget').value, 10) || DEFAULTS.thinkingBudget,
+    githubToken     : $('cfg-github-token').value.trim(),
+    githubRepo      : $('cfg-github-repo').value.trim(),
+    githubFile      : $('cfg-github-file').value.trim(),
+    githubBranch    : $('cfg-github-branch').value.trim() || 'main',
+  };
+}
+
+function fillCfgUI(cfg) {
+  $('cfg-anthropic-key').value       = cfg.anthropicKey;
+  $('cfg-anthropic-model').value     = cfg.anthropicModel || DEFAULTS.anthropicModel;
+  $('cfg-thinking-toggle').checked   = !!cfg.thinkingEnabled;
+  $('cfg-thinking-budget').value     = cfg.thinkingBudget || DEFAULTS.thinkingBudget;
+  $('thinking-budget-field').hidden  = !cfg.thinkingEnabled;
+  $('cfg-github-token').value        = cfg.githubToken;
+  $('cfg-github-repo').value         = cfg.githubRepo;
+  $('cfg-github-file').value         = cfg.githubFile;
+  $('cfg-github-branch').value       = cfg.githubBranch;
+}
+
+/* ═══════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════ */
+function $(id) { return document.getElementById(id); }
+
+function todayFR() {
+  const d = new Date();
+  const jours = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+  const mois  = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return `${jours[d.getDay()]} ${d.getDate()} ${mois[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function todayISO() { return new Date().toISOString().split('T')[0]; }
+
+/* Unicode-safe base64 ↕ (handles emoji + accents) */
+function encodeB64(str) { return btoa(unescape(encodeURIComponent(str))); }
+function decodeB64(str) { return decodeURIComponent(escape(atob(str.replace(/\s/g, '')))); }
+
+/* ═══════════════════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════════════════ */
+let _statusTimer = null;
+
+function showStatus(msg, type /* loading | success | error */) {
+  const el = $('status-bar');
+  clearTimeout(_statusTimer);
+
+  el.className = `status status-${type}`;
+  el.hidden = false;
+
+  if (type === 'loading') {
+    el.innerHTML = `<span class="spinner"></span><span>${msg}</span>`;
+  } else {
+    el.textContent = msg;
+  }
+
+  if (type === 'success') {
+    _statusTimer = setTimeout(() => { el.hidden = true; }, 5000);
+  }
+}
+
+function clearStatus() {
+  clearTimeout(_statusTimer);
+  $('status-bar').hidden = true;
+}
+
+function showCost({ label, inputEst, outputEst, realCost }) {
+  const el = $('cost-bar');
+  const costStr = realCost != null
+    ? fmtCost(realCost)
+    : `~${fmtCost(inputEst * PRICING.input + (outputEst || 800) * PRICING.output)} estimé`;
+  const isReal = realCost != null;
+
+  el.className = 'cost-bar';
+  el.hidden = false;
+  el.innerHTML =
+    `<span class="cost-label">${label}</span>` +
+    `<span class="cost-amount${isReal ? ' real' : ''}">${costStr}</span>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   GITHUB API
+═══════════════════════════════════════════════════════ */
+async function ghGet(cfg) {
+  const { githubToken, githubRepo, githubFile, githubBranch } = cfg;
+  const url = `https://api.github.com/repos/${githubRepo}/contents/${githubFile}?ref=${encodeURIComponent(githubBranch)}`;
+
+  const r = await fetch(url, {
+    headers: {
+      'Authorization'        : `Bearer ${githubToken}`,
+      'Accept'               : 'application/vnd.github+json',
+      'X-GitHub-Api-Version' : '2022-11-28',
+    },
+  });
+
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw new Error(`GitHub GET ${r.status} — ${b.message || 'erreur inconnue'}`);
+  }
+
+  const data = await r.json();
+  return { content: decodeB64(data.content), sha: data.sha };
+}
+
+async function ghPut(cfg, newContent, sha) {
+  const { githubToken, githubRepo, githubFile, githubBranch } = cfg;
+  const url = `https://api.github.com/repos/${githubRepo}/contents/${githubFile}`;
+
+  const r = await fetch(url, {
+    method : 'PUT',
+    headers: {
+      'Authorization'        : `Bearer ${githubToken}`,
+      'Accept'               : 'application/vnd.github+json',
+      'Content-Type'         : 'application/json',
+      'X-GitHub-Api-Version' : '2022-11-28',
+    },
+    body: JSON.stringify({
+      message : `[Assistant] Nouvelle note — ${todayISO()}`,
+      content : encodeB64(newContent),
+      sha,
+      branch  : githubBranch,
+    }),
+  });
+
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw new Error(`GitHub PUT ${r.status} — ${b.message || 'erreur inconnue'}`);
+  }
+
+  return r.json();
+}
+
+/* ═══════════════════════════════════════════════════════
+   MARKDOWN — parsing & insertion
+═══════════════════════════════════════════════════════ */
+function extractContextSections(md) {
+  // Regex patterns — tolerant to spacing, emoji variants, case variations
+  const PATTERNS = [
+    /^#{1,3}\s*📅\s*CALENDRIER\b/im,
+    /^#{1,3}\s*📁\s*PROJETS\s+ACTIFS\b/im,
+    /^#{1,3}\s*👥\s*RÉSEAU\s*&\s*CONTACTS\b/im,
+  ];
+  const LABELS = ['CALENDRIER', 'PROJETS ACTIFS', 'RÉSEAU & CONTACTS'];
+
+  const parts = [];
+
+  for (let i = 0; i < PATTERNS.length; i++) {
+    const m = PATTERNS[i].exec(md);
+    if (!m) {
+      console.warn(`[AP] Section "${LABELS[i]}" introuvable — ignorée`);
+      continue;
+    }
+
+    const start = m.index;
+    // Find next top-level heading (## or #) that is NOT a sub-heading (###)
+    // We search from just after the matched heading line
+    const afterHead = md.indexOf('\n', start) + 1;
+    const tail = md.slice(afterHead);
+    const nextHead = tail.match(/^#{1,2} [^#]/m);
+    const end = nextHead ? afterHead + nextHead.index : md.length;
+
+    parts.push(md.slice(start, end).trim());
+  }
+
+  if (parts.length === 0) {
+    throw new Error(
+      'Aucune section CALENDRIER / PROJETS ACTIFS / RÉSEAU & CONTACTS trouvée.\n' +
+      'Vérifie que le fichier Markdown contient bien ces en-têtes.'
+    );
+  }
+
+  return parts.join('\n\n---\n\n');
+}
+
+function insertAfterInbox(md, block) {
+  const MARKER = "<!-- Les nouvelles entités sont insérées ICI par l'app -->";
+  const mIdx = md.indexOf(MARKER);
+
+  if (mIdx !== -1) {
+    const at = mIdx + MARKER.length;
+    return md.slice(0, at) + '\n\n' + block.trim() + '\n' + md.slice(at);
+  }
+
+  // Fallback : après le header ## 📥 INBOX
+  const INBOX = '## 📥 INBOX';
+  const iIdx  = md.indexOf(INBOX);
+  if (iIdx === -1) throw new Error('Section INBOX introuvable dans le fichier Markdown');
+
+  const eol = md.indexOf('\n', iIdx);
+  const at  = eol + 1;
+  return md.slice(0, at) + '\n' + block.trim() + '\n\n' + md.slice(at);
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANTHROPIC API
+═══════════════════════════════════════════════════════ */
+function buildSystemPrompt(dateFR, dateISO, contextDump) {
+  return `Tu es l'assistant personnel de Damien. Tu reçois des notes brutes
+(issues de VoiceClip ou rédigées directement) et tu les transformes
+en entités structurées, prêtes à être enregistrées dans son
+système de suivi personnel.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOC A — CONFIGURATION (paramètres évolutifs)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[DATE DU JOUR]
+Lisible : ${dateFR}
+ISO 8601 : ${dateISO}
+→ Utilise le format ISO (AAAA-MM-JJ) pour toutes les dates dans les entités.
+→ Utilise la date lisible uniquement dans les textes narratifs ou la Note IA.
+
+[DOMAINES — tags implicites à appliquer]
+#Pro | #VeilleIA | #Réseau | #Musique | #Photographie | #Vidéo |
+#Sport | #VieCommune | #Admin | #Apprentissage | #DéveloppementPerso |
+#Culture | #Famille | #Finances
+
+[CONTEXTES PROFESSIONNELS]
+- ESN : employeur de Damien (société de conseil)
+- Mission : mission de consultant en cours chez un client (temporaire)
+- Avant-vente : contribution de Damien à des offres commerciales
+  en tant que consultant senior
+
+[PERSONNES CLÉS]
+- Roza : épouse
+- Léonard : ami proche, interlocuteur de test/feedback
+- Clément, Faustine : amis
+
+[PROJETS ACTIFS]
+- Album/Composition : projet musical personnel (Ableton Live)
+- dvanblauw : identité photo artistique, projet Instagram/Patreon
+- VoiceClip : outil de transcription vocale personnel
+- Assistant Personnel : cet outil en cours de construction
+- PSM1 : certification professionnelle en cours de préparation
+
+[ÉTAT ACTUEL DU SYSTÈME]
+${contextDump}
+← Ce bloc est injecté dynamiquement à chaque appel.
+  Il contient le résumé des trois sections clés du fichier
+  Markdown de référence : CALENDRIER, PROJETS ACTIFS, RÉSEAU.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOC B — RÈGLES D'EXTRACTION (ne pas modifier)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RÈGLE 1 — SÉPARATION
+Si une note contient plusieurs actions, idées ou événements distincts,
+crée une entité séparée pour chacun. Ne fusionne jamais deux entités
+de nature différente, même si elles proviennent de la même phrase.
+
+RÈGLE 2 — CONTEXTE TEMPOREL
+Utilise toujours la date du jour pour convertir toute référence
+relative ("ce weekend", "d'ici la fin du mois", "dans deux semaines")
+en date calendaire concrète. Si la conversion est incertaine,
+propose une plage (ex : "entre le 15 et le 17 mars").
+
+RÈGLE 3 — DÉTECTION DU BLOCAGE ÉMOTIONNEL
+Si la note contient des signaux de procrastination ou de blocage
+("je procrastine", "je n'arrive pas à", "blocage", "j'ai du mal",
+"je dois mais...", "pas encore fait"), ne génère PAS une Tâche.
+Génère une Réflexion avec une suggestion douce orientée vers
+le sens ou le plaisir, pas vers l'action forcée.
+
+RÈGLE 4 — AUTO-TAGGING
+Applique automatiquement les tags du Bloc A selon le contenu
+sémantique. Une entité peut recevoir plusieurs tags.
+En cas de doute, applique le tag le plus probable et signale
+[tag incertain].
+
+RÈGLE 5 — LIAISON PROJETS ET PERSONNES
+Si le contenu fait référence (même implicitement) à un projet actif
+ou une personne clé du Bloc A, relie l'entité à cet élément.
+Si un nouveau projet ou une nouvelle personne non répertoriée
+apparaît, crée l'entité normalement mais ajoute la mention :
+[NOUVEAU ÉLÉMENT — à confirmer et à ajouter à la configuration]
+
+RÈGLE 6 — CONTEXTE PROFESSIONNEL
+Si la note touche à la vie professionnelle, identifie et précise
+le contexte parmi : ESN / Mission / Avant-vente.
+
+RÈGLE 7 — GESTION DE L'INCERTITUDE
+Si le type d'entité ou le tag est ambigu, ne supprime pas
+l'information. Classe au mieux et indique :
+[Confiance : haute / moyenne / faible].
+Ajoute une courte explication dans la Note IA.
+
+RÈGLE 8 — STATUT PAR DÉFAUT
+Toute entité produite reçoit le statut [À vérifier] par défaut.
+Ce statut sera levé par Damien lors de sa revue.
+Statuts disponibles : [À vérifier] / [En attente] / [Validé] / [Archivé]
+
+RÈGLE 9 — PAS DE DATE FERME POUR LES TÂCHES À PLANIFIER
+Si une tâche nécessite d'être planifiée dans des créneaux libres,
+ne fixe jamais de date ferme. Propose 2 ou 3 options horaires
+dans la Note IA (ex : Option 1 : Jeudi 14h-16h / Option 2 :
+Vendredi 10h-12h) pour que Damien choisisse lors de sa revue.
+
+RÈGLE 10 — MISE À JOUR DU RÉSEAU
+Si la note mentionne une interaction passée ou future avec une
+personne de la section RÉSEAU & CONTACTS, génère une sous-tâche
+avec le tag #Réseau et le statut [À vérifier] pour rappeler à
+Damien de mettre à jour la date "Dernier contact" de cette
+personne dans le fichier.
+Ne génère pas de jugement sur la fréquence des contacts —
+cela est réservé à la synthèse hebdomadaire.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOC C — FORMAT DE SORTIE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Pour chaque entité, utilise strictement ce format :
+
+---
+### [TYPE] — Titre court et actionnable
+
+| Champ            | Valeur                        |
+|------------------|-------------------------------|
+| 📅 Date/Échéance | ...                           |
+| 🏷️ Tags          | ...                           |
+| 👤 Personne(s)   | ...                           |
+| 📁 Projet lié    | ...                           |
+| 💼 Contexte pro  | ... (si applicable)           |
+| ✅ Statut        | [À vérifier]                  |
+
+> 💡 Note IA : [Explication du classement, liens identifiés,
+> incertitudes, suggestion si Réflexion]
+
+---
+
+TYPES DISPONIBLES :
+- 📅 ÉVÉNEMENT  → date fixe, lieu, personnes présentes
+- ✅ TÂCHE      → action concrète, échéance, priorité
+- 🎯 ROUTINE    → récurrent, sans date fixe, rythme à définir
+- 🧠 RÉFLEXION  → blocage, question ouverte, idée à mûrir
+
+ORDRE DE SORTIE : Événements → Tâches → Routines → Réflexions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INSTRUCTION FINALE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Traite la note ci-dessous. Produis UNIQUEMENT les entités
+structurées selon le format du Bloc C. Aucun commentaire
+hors format.`;
+}
+
+async function callAnthropic(cfg, systemPrompt, note) {
+  const body = {
+    model      : cfg.anthropicModel,
+    max_tokens : cfg.thinkingEnabled ? cfg.thinkingBudget + 4096 : 4096,
+    system     : systemPrompt,
+    messages   : [{ role: 'user', content: note }],
+  };
+
+  if (cfg.thinkingEnabled) {
+    body.thinking = { type: 'enabled', budget_tokens: cfg.thinkingBudget };
+    // temperature must be omitted (defaults to 1) when thinking is enabled
+  }
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method : 'POST',
+    headers: {
+      'Content-Type'                              : 'application/json',
+      'x-api-key'                                 : cfg.anthropicKey,
+      'anthropic-version'                         : '2023-06-01',
+      'anthropic-dangerous-direct-browser-access' : 'true',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw new Error(`Anthropic ${r.status} — ${b.error?.message || 'erreur API'}`);
+  }
+
+  const data = await r.json();
+  // Extract only text blocks (skip thinking blocks)
+  const text = data.content?.filter(b => b.type === 'text').map(b => b.text).join('');
+  if (!text) throw new Error('Réponse Anthropic vide ou format inattendu');
+
+  return { text, usage: data.usage || null };
+}
+
+/* ═══════════════════════════════════════════════════════
+   HANDLERS PRINCIPAUX
+═══════════════════════════════════════════════════════ */
+async function handleAnalyze() {
+  const cfg  = readCfgFromUI();
+  const note = $('note-input').value.trim();
+
+  /* Validation */
+  if (!cfg.anthropicKey)  return showStatus('⚠️ Clé API Anthropic manquante — ouvre la configuration', 'error');
+  if (!cfg.githubToken)   return showStatus('⚠️ Token GitHub manquant — ouvre la configuration', 'error');
+  if (!cfg.githubRepo)    return showStatus('⚠️ Repo GitHub manquant (format : propriétaire/repo)', 'error');
+  if (!cfg.githubFile)    return showStatus('⚠️ Chemin du fichier Markdown manquant', 'error');
+  if (!note)              return showStatus('⚠️ La note est vide', 'error');
+
+  /* Persist config so user doesn't have to re-enter next time */
+  saveCfg(cfg);
+
+  const analyzeBtn = $('analyze-btn');
+  const sasSection = $('sas-section');
+
+  analyzeBtn.disabled = true;
+  sasSection.hidden   = true;
+
+  try {
+    /* ── ÉTAPE 1 : GitHub GET ── */
+    showStatus('Récupération du fichier GitHub…', 'loading');
+    const { content, sha } = await ghGet(cfg);
+    S.fileContent  = content;
+    S.fileSha      = sha;
+    S.contextDump  = extractContextSections(content);
+
+    /* ── ESTIMATION AVANT APPEL ── */
+    const systemPrompt = buildSystemPrompt(todayFR(), todayISO(), S.contextDump);
+    const tokIn = estimateTokens(systemPrompt) + estimateTokens(note);
+    const tokMd = estimateTokens(S.contextDump);
+    showCost({
+      label     : `Contexte chargé — ~${tokMd.toLocaleString('fr')} tokens MD · ~${tokIn.toLocaleString('fr')} tokens envoyés`,
+      inputEst  : tokIn,
+      outputEst : null,
+    });
+
+    /* ── ÉTAPE 2 : Anthropic ── */
+    showStatus('Analyse en cours avec Claude…', 'loading');
+    const { text: result, usage } = await callAnthropic(cfg, systemPrompt, note);
+
+    /* ── COÛT RÉEL (si usage disponible) ── */
+    if (usage) {
+      const costIn  = usage.input_tokens  * PRICING.input;
+      const costOut = usage.output_tokens * PRICING.output;
+      showCost({
+        label     : `${usage.input_tokens.toLocaleString('fr')} tokens in · ${usage.output_tokens.toLocaleString('fr')} tokens out`,
+        inputEst  : usage.input_tokens,
+        outputEst : usage.output_tokens,
+        realCost  : costIn + costOut,
+      });
+    }
+
+    /* ── AFFICHER SAS ── */
+    $('sas-content').value = result;
+    sasSection.hidden = false;
+    clearStatus();
+
+    setTimeout(() => sasSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+
+  } catch (err) {
+    showStatus(`❌ ${err.message}`, 'error');
+    console.error('[AP/analyze]', err);
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+async function handleValidate() {
+  if (!S.fileContent || !S.fileSha) {
+    return showStatus('❌ Données manquantes — relance l\'analyse', 'error');
+  }
+
+  const editedBlock = $('sas-content').value.trim();
+  if (!editedBlock) return showStatus('⚠️ Le sas de validation est vide', 'error');
+
+  const cfg         = readCfgFromUI();
+  const validateBtn = $('validate-btn');
+  validateBtn.disabled = true;
+
+  try {
+    /* ── ÉTAPE 3 : GitHub PUT ── */
+    showStatus('Insertion et envoi vers GitHub…', 'loading');
+    const updatedMarkdown = insertAfterInbox(S.fileContent, editedBlock);
+    await ghPut(cfg, updatedMarkdown, S.fileSha);
+
+    showStatus('✅ Enregistré dans GitHub avec succès !', 'success');
+
+    /* Reset après 2 s */
+    setTimeout(() => {
+      $('note-input').value   = '';
+      $('sas-content').value  = '';
+      $('sas-section').hidden = true;
+      $('cost-bar').hidden    = true;
+      S.fileContent = S.fileSha = S.contextDump = null;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 2000);
+
+  } catch (err) {
+    showStatus(`❌ ${err.message}`, 'error');
+    console.error('[AP/validate]', err);
+  } finally {
+    validateBtn.disabled = false;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  /* Hydrate config */
+  const cfg = loadCfg();
+  fillCfgUI(cfg);
+
+  /* Date du jour */
+  $('date-display').textContent = todayFR();
+
+  /* Config panel : auto-open if not yet configured */
+  const panelEl  = $('config-panel');
+  const toggleEl = $('config-toggle');
+
+  const openConfig = () => {
+    panelEl.hidden   = false;
+    toggleEl.textContent = '⚙️ Masquer ▴';
+  };
+
+  const closeConfig = () => {
+    panelEl.hidden   = true;
+    toggleEl.textContent = '⚙️ Afficher ▾';
+  };
+
+  if (!cfg.anthropicKey || !cfg.githubToken) openConfig();
+
+  toggleEl.addEventListener('click', () => {
+    panelEl.hidden ? openConfig() : closeConfig();
+  });
+
+  /* Thinking toggle → show/hide budget field */
+  $('cfg-thinking-toggle').addEventListener('change', function () {
+    $('thinking-budget-field').hidden = !this.checked;
+  });
+
+  /* Config save */
+  $('config-save').addEventListener('click', () => {
+    const newCfg = readCfgFromUI();
+    saveCfg(newCfg);
+    showStatus('✅ Configuration sauvegardée', 'success');
+  });
+
+  /* Main actions */
+  $('analyze-btn').addEventListener('click', handleAnalyze);
+  $('validate-btn').addEventListener('click', handleValidate);
+
+  /* Keyboard shortcut : Ctrl/Cmd + Enter → Analyser */
+  $('note-input').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleAnalyze();
+    }
+  });
+});
+</script>
+</body>
+</html>
