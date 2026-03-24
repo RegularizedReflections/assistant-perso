@@ -371,6 +371,83 @@
     .tl-text { flex: 1; font-size: 0.78rem; color: var(--text); line-height: 1.35; }
     .tl-people { font-size: 0.68rem; color: var(--text-faint); }
 
+    /* ── TRIAGE BAR ─────────────────────────────── */
+    .triage-bar {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      padding: 8px 12px 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .triage-btn {
+      flex: 1; min-width: 80px;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.68rem; font-weight: 500;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      padding: 6px 10px; cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+
+    .triage-btn:hover { background: var(--surface2); color: var(--text); }
+
+    .triage-btn.active[data-status="Validé"] {
+      background: rgba(122,173,122,0.18);
+      color: var(--success);
+      border-color: rgba(122,173,122,0.4);
+    }
+
+    .triage-btn.active[data-status="En attente"] {
+      background: rgba(122,154,176,0.18);
+      color: var(--info);
+      border-color: rgba(122,154,176,0.4);
+    }
+
+    .triage-btn.active[data-status="Archivé"],
+    .triage-archive.active {
+      background: rgba(80,75,68,0.3);
+      color: var(--text-faint);
+      border-color: var(--border2);
+    }
+
+    .entity-archived {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    .entity-archived .triage-bar { pointer-events: all; opacity: 1; }
+
+    /* ── SAVE BAR ───────────────────────────────── */
+    #save-bar {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 14px;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 40px;
+      padding: 10px 18px 10px 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-dim);
+      z-index: 200;
+      animation: fadeUp 0.2s ease;
+      white-space: nowrap;
+    }
+
+    #save-bar-label {
+      font-size: 0.78rem; color: var(--accent); font-weight: 400;
+    }
+
+    #save-bar-btn {
+      background: var(--accent); color: var(--accent-fg);
+      border: none; border-radius: 20px;
+      padding: 7px 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    #save-bar-btn:hover:not(:disabled) { opacity: 0.85; }
+    #save-bar-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -476,6 +553,12 @@
   </div>
 
 </div><!-- /#grid -->
+
+<!-- ══ SAVE BAR (flottante) ══════════════════════════ -->
+<div id="save-bar" hidden>
+  <span id="save-bar-label"></span>
+  <button id="save-bar-btn" onclick="handleSave()">Sauvegarder</button>
+</div>
 
 <script>
 'use strict';
@@ -650,12 +733,118 @@ async function fetchMD(cfg) {
     throw new Error(`GitHub ${r.status} — ${b.message || 'erreur'}`);
   }
   const data = await r.json();
-  return decodeB64(data.content);
+  return { content: decodeB64(data.content), sha: data.sha };
+}
+
+async function putMD(cfg, content, sha) {
+  const { githubToken, githubRepo, githubFile, githubBranch = 'main' } = cfg;
+  const url = `https://api.github.com/repos/${githubRepo}/contents/${githubFile}`;
+  const encodeB64 = str => btoa(unescape(encodeURIComponent(str)));
+  const r = await fetch(url, {
+    method : 'PUT',
+    headers: {
+      'Authorization'        : `Bearer ${githubToken}`,
+      'Accept'               : 'application/vnd.github+json',
+      'Content-Type'         : 'application/json',
+      'X-GitHub-Api-Version' : '2022-11-28',
+    },
+    body: JSON.stringify({
+      message : `[Dashboard] Triage inbox — ${todayISO()}`,
+      content : encodeB64(content),
+      sha,
+      branch  : githubBranch,
+    }),
+  });
+  if (!r.ok) {
+    const b = await r.json().catch(()=>({}));
+    throw new Error(`GitHub PUT ${r.status} — ${b.message || 'erreur'}`);
+  }
+  return r.json();
 }
 
 /* ═══════════════════════════════════════════════════════
    PARSERS
 ═══════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════
+   TRIAGE STATE
+═══════════════════════════════════════════════════════ */
+const TRIAGE = {
+  rawMd   : null,   // full markdown string, kept up to date
+  sha     : null,   // GitHub file SHA
+  changes : {},     // { entityIdx: { title, newStatus, archive } }
+};
+
+function triageCount() { return Object.keys(TRIAGE.changes).length; }
+
+/* Remplace le statut d'une entité dans le Markdown brut.
+   Cherche la ligne ### … — <title> puis la ligne | ✅ Statut | … | */
+function patchStatus(md, title, newStatus) {
+  // Échappe les caractères regex dans le titre
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Trouve le bloc ### … — <title>
+  const headRe  = new RegExp(`^###[^\\n]+[—\\-–]\\s*${escaped}\\s*$`, 'm');
+  const headM   = headRe.exec(md);
+  if (!headM) { console.warn('[Triage] bloc introuvable:', title); return md; }
+
+  // Dans ce bloc (jusqu'au prochain ---), remplace la ligne Statut
+  const blockStart = headM.index;
+  const blockEnd   = md.indexOf('\n---', blockStart + 1);
+  const slice      = blockEnd !== -1 ? md.slice(blockStart, blockEnd) : md.slice(blockStart);
+
+  const patched = slice.replace(
+    /(\|\s*✅\s*Statut\s*\|\s*)(\[?[^\]|]*\]?)(\s*\|)/,
+    `$1[${newStatus}]$3`
+  );
+  if (blockEnd !== -1) return md.slice(0, blockStart) + patched + md.slice(blockEnd);
+  return md.slice(0, blockStart) + patched;
+}
+
+/* Déplace un bloc de l'INBOX vers la section ARCHIVE */
+function archiveBlock(md, title) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const headRe  = new RegExp(`^###[^\\n]+[—\\-–]\\s*${escaped}\\s*$`, 'm');
+  const headM   = headRe.exec(md);
+  if (!headM) return md;
+
+  const blockStart = headM.index;
+  // Inclut le --- précédant (une ligne avant le bloc si présente)
+  const pre     = md.lastIndexOf('\n---\n', blockStart);
+  const cutFrom = pre !== -1 ? pre : blockStart;
+  const cutTo   = md.indexOf('\n---', blockStart + 1);
+  const block   = cutTo !== -1 ? md.slice(cutFrom, cutTo) : md.slice(cutFrom);
+
+  // Retire le bloc de l'INBOX
+  let patched = cutTo !== -1
+    ? md.slice(0, cutFrom) + md.slice(cutTo)
+    : md.slice(0, cutFrom);
+
+  // Insère dans ARCHIVE juste avant le commentaire ou en fin de section
+  const archMarker = '<!-- Archivage progressif lors des revues -->';
+  const archIdx    = patched.indexOf(archMarker);
+  const insertion  = '\n' + block.trim() + '\n\n';
+
+  if (archIdx !== -1) {
+    patched = patched.slice(0, archIdx) + insertion + patched.slice(archIdx);
+  } else {
+    patched = patched.trimEnd() + insertion;
+  }
+  return patched;
+}
+
+/* Applique tous les changements en attente au rawMd */
+function applyAllChanges() {
+  let md = TRIAGE.rawMd;
+  for (const { title, newStatus, archive } of Object.values(TRIAGE.changes)) {
+    if (archive) {
+      md = patchStatus(md, title, 'Archivé');
+      md = archiveBlock(md, title);
+    } else {
+      md = patchStatus(md, title, newStatus);
+    }
+  }
+  return md;
+}
 
 /* ══════════════════════════════════════════════════════
    PARSERS — utilisent getLines(), sans argument md
@@ -684,6 +873,8 @@ function parseInbox() {
         .replace(/[\u2000-\u2BFF]/g, '')
         .trim();
       const val = row[2].trim();
+      // Ignore header row ("Champ" / "Valeur") and separator rows
+      if (/^champ$/i.test(rawKey) || /^valeur$/i.test(val)) continue;
       if (rawKey && val && val !== '...' && !rawKey.startsWith('--'))
         fields[rawKey] = val;
     }
@@ -719,7 +910,8 @@ function parseCalendar() {
     const d = parseDate(isoDate);
     if (!d || !label) continue;
     const diff = dateDiff(d);
-    if (diff < -14 || diff > 60) continue;
+    // Seulement aujourd'hui et le futur (60 jours max)
+    if (diff < 0 || diff > 60) continue;
 
     items.push({ isoDate, label, people, tags, status, diff });
   }
@@ -858,6 +1050,64 @@ function parseReflections() {
 /* ═══════════════════════════════════════════════════════
    RENDERERS
 ═══════════════════════════════════════════════════════ */
+/* ── SAVE BAR ── */
+function updateSaveBar() {
+  const n   = triageCount();
+  const bar = $('save-bar');
+  if (n === 0) { bar.hidden = true; return; }
+  bar.hidden = false;
+  $('save-bar-label').textContent =
+    `${n} modification${n > 1 ? 's' : ''} en attente`;
+}
+
+async function handleSave() {
+  if (!triageCount()) return;
+  const cfg = loadCfg();
+  const btn = $('save-bar-btn');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
+  try {
+    const newMd = applyAllChanges();
+    await putMD(cfg, newMd, TRIAGE.sha);
+    // Reload complet pour resync avec GitHub
+    await load();
+  } catch(err) {
+    btn.disabled = false;
+    btn.textContent = 'Sauvegarder';
+    alert('Erreur : ' + err.message);
+  }
+}
+
+/* ── TRIAGE BUTTON HANDLER ── */
+function onTriageBtn(idx, title, newStatus, archive) {
+  // Toggle : re-clic sur le même statut → annule
+  const existing = TRIAGE.changes[idx];
+  if (existing && existing.newStatus === newStatus && !archive) {
+    delete TRIAGE.changes[idx];
+  } else {
+    TRIAGE.changes[idx] = { title, newStatus, archive: !!archive };
+  }
+  updateSaveBar();
+  // Mise à jour visuelle de la carte
+  refreshEntityCard(idx, TRIAGE.changes[idx]?.newStatus);
+}
+
+function refreshEntityCard(idx, activeStatus) {
+  const card = document.querySelector(`[data-entity="${idx}"]`);
+  if (!card) return;
+  const btns = card.querySelectorAll('.triage-btn');
+  btns.forEach(btn => {
+    const s = btn.dataset.status;
+    const isActive = s === activeStatus;
+    btn.classList.toggle('active', isActive);
+  });
+  // Grise la carte si archivée
+  const isArchived = activeStatus === 'Archivé';
+  card.classList.toggle('entity-archived', isArchived);
+}
+
+/* ── RENDER INBOX (avec triage) ── */
 function renderInbox(entities) {
   const count = $('inbox-count');
   const body  = $('inbox-body');
@@ -868,16 +1118,17 @@ function renderInbox(entities) {
 
   if (n === 0) { body.innerHTML = '<div class="empty">Inbox vide — bien joué.</div>'; return; }
 
-  body.innerHTML = entities.map(e => {
+  body.innerHTML = entities.map((e, idx) => {
     const relevantFields = Object.entries(e.fields).filter(([k]) =>
       !k.includes('Statut') && k !== '---'
     );
+    const currentStatus = e.fields[Object.keys(e.fields).find(k => /statut/i.test(k))] || 'À vérifier';
 
-    return `<div class="inbox-entity">
+    return `<div class="inbox-entity" data-entity="${idx}">
       <div class="inbox-head">
         ${typeBadge(e.type)}
         <span class="inbox-title">${esc(e.title)}</span>
-        ${e.fields['✅ Statut'] ? badgeStatus(e.fields['✅ Statut']) : badgeStatus('À vérifier')}
+        ${badgeStatus(currentStatus)}
       </div>
       <div class="inbox-fields">
         ${relevantFields.map(([k,v]) => `
@@ -887,6 +1138,20 @@ function renderInbox(entities) {
           </div>`).join('')}
       </div>
       ${e.note ? `<div class="inbox-note">💡 ${esc(e.note.slice(0,180))}${e.note.length>180?'…':''}</div>` : ''}
+      <div class="triage-bar">
+        <button class="triage-btn" data-status="Validé"
+          onclick="onTriageBtn(${idx}, ${JSON.stringify(e.title)}, 'Validé', false)">
+          ✓ Validé
+        </button>
+        <button class="triage-btn" data-status="En attente"
+          onclick="onTriageBtn(${idx}, ${JSON.stringify(e.title)}, 'En attente', false)">
+          ⏳ En attente
+        </button>
+        <button class="triage-btn triage-archive" data-status="Archivé"
+          onclick="onTriageBtn(${idx}, ${JSON.stringify(e.title)}, 'Archivé', true)">
+          → Archiver
+        </button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1099,7 +1364,13 @@ async function load() {
   }
 
   try {
-    const md = await fetchMD(cfg);
+    const { content: md, sha } = await fetchMD(cfg);
+
+    // Stocker pour le triage
+    TRIAGE.rawMd   = md;
+    TRIAGE.sha     = sha;
+    TRIAGE.changes = {};
+    updateSaveBar();
 
     $('loader-text').textContent = 'Analyse du Markdown…';
 
