@@ -1059,6 +1059,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfg = loadCfg();
   fillCfgUI(cfg);
 
+  /* Pré-remplir depuis ?note= (lien depuis dashboard réflexions) */
+  const urlNote = new URLSearchParams(window.location.search).get('note');
+  if (urlNote) {
+    $('note-input').value = decodeURIComponent(urlNote);
+    // Ouvre le config panel si tokens manquants, sinon focus textarea
+    if (cfg.anthropicKey && cfg.githubToken) {
+      $('note-input').focus();
+      $('note-input').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   /* Date du jour */
   $('date-display').textContent = todayFR();
 
