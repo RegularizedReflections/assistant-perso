@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧠 Dashboard Personnel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d0c0a;
+      --surface:    #141210;
+      --surface2:   #1c1a16;
+      --surface3:   #22201b;
+      --border:     #2a2720;
+      --border2:    #38342b;
+      --accent:     #c8a96e;
+      --accent-dim: rgba(200,169,110,0.15);
+      --accent-fg:  #1a1510;
+      --text:       #e4dfd3;
+      --text-muted: #7a7568;
+      --text-faint: #44403a;
+      --success:    #7aad7a;
+      --warn:       #c8a96e;
+      --error:      #c07878;
+      --info:       #7a9ab0;
+      --violet:     #9b8fc0;
+      --r:          10px;
+      --r-sm:       6px;
+    }
+
+    html { font-size: 15px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      line-height: 1.55;
+      min-height: 100dvh;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 999;
+      opacity: 0.022;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* ── TOPBAR ───────────────────────────────────── */
+    #topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,12,10,0.88);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 11px 18px;
+      gap: 12px;
+    }
+
+    .topbar-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.05rem;
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    .topbar-date {
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+
+    .btn-add {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--accent); color: var(--accent-fg);
+      border: none; border-radius: var(--r-sm);
+      padding: 7px 13px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      text-decoration: none; cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-add:hover { opacity: 0.85; }
+
+    .btn-refresh {
+      background: none; border: 1px solid var(--border2);
+      border-radius: var(--r-sm); color: var(--text-muted);
+      padding: 7px 10px; font-size: 0.85rem; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      line-height: 1;
+    }
+    .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── GRID ─────────────────────────────────────── */
+    #grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 16px 14px 60px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 700px) {
+      #grid { grid-template-columns: 1fr 1fr; }
+      .span2 { grid-column: 1 / -1; }
+    }
+
+    @media (min-width: 1000px) {
+      #grid { grid-template-columns: 1fr 1fr 1fr; }
+      .span2 { grid-column: span 2; }
+      .span3 { grid-column: 1 / -1; }
+    }
+
+    /* ── CARD ─────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+
+    .card-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .card-label {
+      font-size: 0.65rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--text-muted);
+    }
+
+    .card-count {
+      font-size: 0.68rem; font-family: 'JetBrains Mono', monospace;
+      background: var(--surface3); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 1px 8px;
+      color: var(--text-muted);
+    }
+
+    .card-count.has-items { background: var(--accent-dim); color: var(--accent); border-color: rgba(200,169,110,0.3); }
+
+    .card-body { padding: 12px 14px; flex: 1; overflow: hidden; }
+    .card-body.scroll { max-height: 320px; overflow-y: auto; }
+    .card-body.scroll::-webkit-scrollbar { width: 3px; }
+    .card-body.scroll::-webkit-scrollbar-track { background: transparent; }
+    .card-body.scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* ── STATUS BADGE ─────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center;
+      font-size: 0.6rem; letter-spacing: 0.08em;
+      text-transform: uppercase; border-radius: 4px;
+      padding: 2px 6px; font-weight: 500; white-space: nowrap;
+    }
+    .badge-verifier  { background: rgba(200,169,110,0.12); color: var(--warn);    border: 1px solid rgba(200,169,110,0.25); }
+    .badge-attente   { background: rgba(122,154,176,0.12); color: var(--info);    border: 1px solid rgba(122,154,176,0.25); }
+    .badge-valide    { background: rgba(122,173,122,0.12); color: var(--success); border: 1px solid rgba(122,173,122,0.25); }
+    .badge-archive   { background: rgba(80,75,68,0.3);     color: var(--text-faint); border: 1px solid var(--border); }
+
+    /* ── TYPE BADGE ───────────────────────────────── */
+    .type-badge {
+      font-size: 0.58rem; letter-spacing: 0.06em; text-transform: uppercase;
+      border-radius: 3px; padding: 1px 5px; font-weight: 500;
+      display: inline-block; flex-shrink: 0;
+    }
+    .type-event    { background: rgba(122,154,176,0.15); color: var(--info); }
+    .type-task     { background: rgba(122,173,122,0.15); color: var(--success); }
+    .type-routine  { background: rgba(155,143,192,0.15); color: var(--violet); }
+    .type-reflect  { background: rgba(200,169,110,0.12); color: var(--warn); }
+
+    /* ── TAG CHIP ─────────────────────────────────── */
+    .tag {
+      font-size: 0.6rem; background: var(--surface3);
+      border: 1px solid var(--border2); border-radius: 3px;
+      padding: 1px 5px; color: var(--text-faint);
+      display: inline-block;
+    }
+
+    /* ── ROWS ─────────────────────────────────────── */
+    .row {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .row:last-child { border-bottom: none; padding-bottom: 0; }
+    .row:first-child { padding-top: 0; }
+
+    .row-main { flex: 1; min-width: 0; }
+    .row-title {
+      font-size: 0.82rem; font-weight: 400;
+      color: var(--text); line-height: 1.35;
+      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .row-sub {
+      font-size: 0.7rem; color: var(--text-muted);
+      margin-top: 2px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .row-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+
+    /* ── DATE PILL ────────────────────────────────── */
+    .date-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem; color: var(--text-faint);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 6px; white-space: nowrap;
+    }
+    .date-pill.today    { color: var(--accent); border-color: rgba(200,169,110,0.4); background: var(--accent-dim); }
+    .date-pill.soon     { color: var(--success); border-color: rgba(122,173,122,0.3); }
+    .date-pill.overdue  { color: var(--error);   border-color: rgba(192,120,120,0.3); }
+
+    /* ── INBOX ENTITY ─────────────────────────────── */
+    .inbox-entity {
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      margin-bottom: 10px;
+      overflow: hidden;
+      background: var(--surface2);
+    }
+    .inbox-entity:last-child { margin-bottom: 0; }
+
+    .inbox-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; background: var(--surface3);
+      flex-wrap: wrap;
+    }
+
+    .inbox-title {
+      font-size: 0.82rem; font-weight: 400; flex: 1; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .inbox-fields {
+      padding: 8px 12px; font-size: 0.72rem;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+
+    .inbox-field { display: flex; gap: 6px; color: var(--text-muted); }
+    .inbox-field-key { flex-shrink: 0; min-width: 80px; color: var(--text-faint); }
+
+    .inbox-note {
+      padding: 6px 12px; font-size: 0.7rem; color: var(--text-faint);
+      border-top: 1px solid var(--border);
+      font-style: italic; line-height: 1.4;
+    }
+
+    /* ── PROJECT CARD ─────────────────────────────── */
+    .proj-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.92rem; font-weight: 400;
+      color: var(--accent); margin-bottom: 6px;
+    }
+    .proj-item {
+      font-size: 0.75rem; color: var(--text-muted);
+      display: flex; gap: 6px;
+      padding: 3px 0; border-bottom: 1px solid var(--border);
+    }
+    .proj-item:last-child { border-bottom: none; }
+    .proj-key { flex-shrink: 0; color: var(--text-faint); min-width: 100px; }
+
+    /* ── NETWORK CARD ─────────────────────────────── */
+    .contact-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .contact-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .contact-row:first-child { padding-top: 0; }
+
+    .contact-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--surface3); border: 1px solid var(--border2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 500; flex-shrink: 0;
+      color: var(--accent);
+    }
+
+    .contact-name { font-size: 0.82rem; font-weight: 400; }
+    .contact-meta { font-size: 0.68rem; color: var(--text-muted); }
+    .contact-freq { font-size: 0.65rem; color: var(--text-faint); }
+
+    /* ── EMPTY STATE ──────────────────────────────── */
+    .empty {
+      text-align: center; padding: 22px 12px;
+      font-size: 0.75rem; color: var(--text-faint);
+      font-style: italic;
+    }
+
+    /* ── LOADING / ERROR ──────────────────────────── */
+    #loader {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; background: var(--bg); z-index: 200;
+    }
+
+    #loader.hidden { display: none; }
+
+    .loader-spinner {
+      width: 28px; height: 28px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text { font-size: 0.8rem; color: var(--text-muted); }
+
+    #error-banner {
+      background: rgba(192,120,120,0.1); border: 1px solid rgba(192,120,120,0.25);
+      color: var(--error); border-radius: var(--r);
+      padding: 14px 18px; margin: 16px 14px;
+      font-size: 0.82rem; line-height: 1.5;
+    }
+
+    #error-banner.hidden { display: none; }
+
+    /* ── SECTION HEADER ───────────────────────────── */
+    .section-head {
+      padding: 6px 0 8px;
+      font-size: 0.62rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--text-faint);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+
+    /* ── TIMELINE DOT ─────────────────────────────── */
+    .timeline-row {
+      display: flex; gap: 10px;
+      padding: 6px 0; border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .timeline-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .timeline-row:first-child { padding-top: 0; }
+
+    .tl-date {
+      flex-shrink: 0; width: 72px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem; color: var(--text-faint); padding-top: 2px;
+    }
+
+    .tl-date.today   { color: var(--accent); font-weight: 500; }
+    .tl-date.soon    { color: var(--success); }
+    .tl-date.overdue { color: var(--error); }
+
+    .tl-dot {
+      flex-shrink: 0; margin-top: 5px;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border2);
+    }
+    .tl-dot.event   { background: var(--info); }
+    .tl-dot.task    { background: var(--success); }
+    .tl-dot.today   { background: var(--accent); box-shadow: 0 0 5px rgba(200,169,110,0.4); }
+
+    .tl-text { flex: 1; font-size: 0.78rem; color: var(--text); line-height: 1.35; }
+    .tl-people { font-size: 0.68rem; color: var(--text-faint); }
+
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+
+<!-- ══ LOADER ═════════════════════════════════════════ -->
+<div id="loader">
+  <div class="loader-spinner"></div>
+  <p class="loader-text" id="loader-text">Chargement…</p>
+</div>
+
+<!-- ══ ERROR ══════════════════════════════════════════ -->
+<div id="error-banner" class="hidden"></div>
+
+<!-- ══ TOPBAR ═════════════════════════════════════════ -->
+<div id="topbar">
+  <span class="topbar-title">🧠 Dashboard</span>
+  <div class="topbar-right">
+    <span class="topbar-date" id="topbar-date"></span>
+    <button class="btn-refresh" id="btn-refresh" title="Rafraîchir">↻</button>
+    <a class="btn-add" id="btn-add" href="index.html">+ Note</a>
+  </div>
+</div>
+
+<!-- ══ GRID ═══════════════════════════════════════════ -->
+<div id="grid" hidden>
+
+  <!-- INBOX -->
+  <div class="card span2" id="card-inbox">
+    <div class="card-head">
+      <span class="card-label">📥 Inbox</span>
+      <span class="card-count" id="inbox-count">0</span>
+    </div>
+    <div class="card-body scroll" id="inbox-body">
+      <div class="empty">Inbox vide — bien joué.</div>
+    </div>
+  </div>
+
+  <!-- CALENDRIER -->
+  <div class="card span2" id="card-cal">
+    <div class="card-head">
+      <span class="card-label">📅 Calendrier 30 j</span>
+      <span class="card-count" id="cal-count">0</span>
+    </div>
+    <div class="card-body scroll" id="cal-body">
+      <div class="empty">Aucun événement à venir.</div>
+    </div>
+  </div>
+
+  <!-- PROJETS -->
+  <div class="card span2" id="card-projects">
+    <div class="card-head">
+      <span class="card-label">📁 Projets actifs</span>
+      <span class="card-count" id="proj-count">0</span>
+    </div>
+    <div class="card-body" id="proj-body">
+      <div class="empty">Aucun projet.</div>
+    </div>
+  </div>
+
+  <!-- TÂCHES -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-label">✅ Tâches</span>
+      <span class="card-count" id="task-count">0</span>
+    </div>
+    <div class="card-body scroll" id="task-body">
+      <div class="empty">Aucune tâche en cours.</div>
+    </div>
+  </div>
+
+  <!-- ROUTINES -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-label">🎯 Routines</span>
+      <span class="card-count" id="routine-count">0</span>
+    </div>
+    <div class="card-body scroll" id="routine-body">
+      <div class="empty">Aucune routine définie.</div>
+    </div>
+  </div>
+
+  <!-- RÉSEAU -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-label">👥 Réseau</span>
+      <span class="card-count" id="net-count">0</span>
+    </div>
+    <div class="card-body scroll" id="net-body">
+      <div class="empty">Aucun contact.</div>
+    </div>
+  </div>
+
+  <!-- RÉFLEXIONS -->
+  <div class="card span2">
+    <div class="card-head">
+      <span class="card-label">🧠 Réflexions ouvertes</span>
+      <span class="card-count" id="reflect-count">0</span>
+    </div>
+    <div class="card-body" id="reflect-body">
+      <div class="empty">Aucune réflexion ouverte.</div>
+    </div>
+  </div>
+
+</div><!-- /#grid -->
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════════════════ */
+function $(id) { return document.getElementById(id); }
+
+const TODAY = new Date();
+TODAY.setHours(0,0,0,0);
+
+function todayISO() { return TODAY.toISOString().split('T')[0]; }
+
+function todayFR() {
+  const j = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+  const m = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return `${j[TODAY.getDay()]} ${TODAY.getDate()} ${m[TODAY.getMonth()]} ${TODAY.getFullYear()}`;
+}
+
+function parseDate(str) {
+  if (!str) return null;
+  const m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function dateDiff(d) {
+  return Math.round((d - TODAY) / 86400000);
+}
+
+function fmtDate(isoStr) {
+  const d = parseDate(isoStr);
+  if (!d) return isoStr;
+  const diff = dateDiff(d);
+  if (diff === 0) return "Aujourd'hui";
+  if (diff === 1) return "Demain";
+  if (diff === -1) return "Hier";
+  const m = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  return `${d.getDate()} ${m[d.getMonth()]}`;
+}
+
+function dateClass(isoStr) {
+  const d = parseDate(isoStr);
+  if (!d) return '';
+  const diff = dateDiff(d);
+  if (diff === 0) return 'today';
+  if (diff < 0)  return 'overdue';
+  if (diff <= 5) return 'soon';
+  return '';
+}
+
+function badgeStatus(statusStr) {
+  if (!statusStr) return '';
+  const s = statusStr.toLowerCase();
+  if (s.includes('vérifier') || s.includes('verifier')) return '<span class="badge badge-verifier">À vérifier</span>';
+  if (s.includes('attente'))  return '<span class="badge badge-attente">En attente</span>';
+  if (s.includes('validé') || s.includes('valide')) return '<span class="badge badge-valide">Validé</span>';
+  if (s.includes('archivé') || s.includes('archive')) return '<span class="badge badge-archive">Archivé</span>';
+  return `<span class="badge badge-archive">${esc(statusStr)}</span>`;
+}
+
+function typeBadge(typeStr) {
+  const t = (typeStr||'').toUpperCase();
+  if (t.includes('ÉVÉNEMENT') || t.includes('EVENEMENT')) return '<span class="type-badge type-event">📅 Événement</span>';
+  if (t.includes('TÂCHE') || t.includes('TACHE')) return '<span class="type-badge type-task">✅ Tâche</span>';
+  if (t.includes('ROUTINE')) return '<span class="type-badge type-routine">🎯 Routine</span>';
+  if (t.includes('RÉFLEXION') || t.includes('REFLEXION')) return '<span class="type-badge type-reflect">🧠 Réflexion</span>';
+  return `<span class="type-badge type-reflect">${esc(typeStr)}</span>`;
+}
+
+function esc(s) {
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function extractSection(md, pattern) {
+  const m = pattern.exec(md);
+  if (!m) return '';
+  const start = m.index;
+  const after = md.indexOf('\n', start) + 1;
+  const tail  = md.slice(after);
+  const next  = tail.match(/^#{1,2} [^#]/m);
+  const end   = next ? after + next.index : md.length;
+  return md.slice(start, end);
+}
+
+/* ═══════════════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════════════ */
+function loadCfg() {
+  try { return JSON.parse(localStorage.getItem('ap_cfg') || '{}'); }
+  catch { return {}; }
+}
+
+function decodeB64(str) {
+  return decodeURIComponent(escape(atob(str.replace(/\s/g,''))));
+}
+
+/* ═══════════════════════════════════════════════════════
+   GITHUB FETCH
+═══════════════════════════════════════════════════════ */
+async function fetchMD(cfg) {
+  const { githubToken, githubRepo, githubFile, githubBranch = 'main' } = cfg;
+  const url = `https://api.github.com/repos/${githubRepo}/contents/${githubFile}?ref=${encodeURIComponent(githubBranch)}`;
+  const r = await fetch(url, {
+    headers: {
+      'Authorization'        : `Bearer ${githubToken}`,
+      'Accept'               : 'application/vnd.github+json',
+      'X-GitHub-Api-Version' : '2022-11-28',
+    }
+  });
+  if (!r.ok) {
+    const b = await r.json().catch(()=>({}));
+    throw new Error(`GitHub ${r.status} — ${b.message || 'erreur'}`);
+  }
+  const data = await r.json();
+  return decodeB64(data.content);
+}
+
+/* ═══════════════════════════════════════════════════════
+   PARSERS
+═══════════════════════════════════════════════════════ */
+
+/* ── INBOX ── */
+function parseInbox(md) {
+  const sec = extractSection(md, /^#{1,3}\s*📥\s*INBOX\b/im);
+  if (!sec) return [];
+
+  const entities = [];
+  // Split on --- delimiters to get individual entities
+  const blocks = sec.split(/^---$/m).map(b => b.trim()).filter(Boolean);
+
+  for (const block of blocks) {
+    // Must have a ### TYPE — Title line
+    const headM = block.match(/^###\s+(.+?)(?:\s*—\s*|\s*-\s*)(.+)$/m);
+    if (!headM) continue;
+
+    const type  = headM[1].trim();
+    const title = headM[2].trim();
+
+    // Parse table rows
+    const fields = {};
+    const tableRows = [...block.matchAll(/\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/g)];
+    for (const row of tableRows) {
+      const key = row[1].trim().replace(/[📅🏷️👤📁💼✅]/gu,'').trim();
+      const val = row[2].trim();
+      if (key && val && !val.startsWith('-')) fields[key] = val;
+    }
+
+    // Parse Note IA
+    const noteM = block.match(/>\s*💡\s*Note IA\s*:\s*(.+?)(?=\n(?!>)|$)/s);
+    const note  = noteM ? noteM[1].replace(/^>\s*/gm,'').trim() : '';
+
+    entities.push({ type, title, fields, note });
+  }
+
+  return entities;
+}
+
+/* ── CALENDRIER ── */
+function parseCalendar(md) {
+  const sec = extractSection(md, /^#{1,3}\s*📅\s*CALENDRIER\b/im);
+  if (!sec) return [];
+
+  const items = [];
+  const lines = sec.split('\n');
+
+  for (const line of lines) {
+    // - **2026-03-15** : Label | People | #Tags | [Status]
+    const m = line.match(/^\s*-\s*\*\*(\d{4}-\d{2}-\d{2})\*\*\s*:\s*(.+)$/);
+    if (!m) continue;
+
+    const isoDate = m[1];
+    const rest    = m[2];
+    const parts   = rest.split('|').map(p => p.trim());
+
+    const label   = parts[0] || '';
+    const people  = parts.slice(1).find(p => !p.startsWith('#') && !p.startsWith('[')) || '';
+    const tags    = parts.filter(p => p.startsWith('#')).join(' ');
+    const status  = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g,'');
+
+    const d = parseDate(isoDate);
+    if (!d) continue;
+    const diff = dateDiff(d);
+    // Only show +30 days and past (overdue only)
+    if (diff > 30) continue;
+
+    items.push({ isoDate, label, people, tags, status, diff });
+  }
+
+  return items.sort((a,b) => a.diff - b.diff);
+}
+
+/* ── PROJETS ── */
+function parseProjects(md) {
+  const sec = extractSection(md, /^#{1,3}\s*📁\s*PROJETS\s+ACTIFS\b/im);
+  if (!sec) return [];
+
+  const projects = [];
+  // Each project starts with ###
+  const blocks = sec.split(/^###\s+/m).slice(1);
+
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const name  = lines[0].trim();
+    const items = [];
+
+    for (const line of lines.slice(1)) {
+      const m = line.match(/^\s*-\s*(.+?)\s*:\s*(.+)$/);
+      if (m) items.push({ key: m[1].trim(), val: m[2].trim() });
+    }
+
+    if (name) projects.push({ name, items });
+  }
+
+  return projects;
+}
+
+/* ── TÂCHES ── */
+function parseTasks(md) {
+  const sec = extractSection(md, /^#{1,3}\s*✅\s*TÂCHES\b/im);
+  if (!sec) return [];
+
+  const tasks = [];
+  for (const line of sec.split('\n')) {
+    const m = line.match(/^\s*-\s*(.+)$/);
+    if (!m) continue;
+    const raw   = m[1];
+    const parts = raw.split('|').map(p => p.trim());
+    const label  = parts[0];
+    const status = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g,'');
+    const tags   = parts.filter(p => p.startsWith('#')).join(' ');
+    const proj   = parts.find(p => !p.startsWith('#') && !p.startsWith('[') && p !== label) || '';
+    if (label) tasks.push({ label, status, tags, proj });
+  }
+  return tasks;
+}
+
+/* ── ROUTINES ── */
+function parseRoutines(md) {
+  const sec = extractSection(md, /^#{1,3}\s*🎯\s*ROUTINES\b/im);
+  if (!sec) return [];
+
+  const routines = [];
+  for (const line of sec.split('\n')) {
+    const m = line.match(/^\s*-\s*(.+)$/);
+    if (!m) continue;
+    const parts = m[1].split('|').map(p => p.trim());
+    const label = parts[0];
+    const freq  = parts[1] || '';
+    const timing= parts[2] || '';
+    const tags  = parts.filter(p => p.startsWith('#')).join(' ');
+    const status= (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g,'');
+    if (label) routines.push({ label, freq, timing, tags, status });
+  }
+  return routines;
+}
+
+/* ── RÉSEAU ── */
+function parseNetwork(md) {
+  const sec = extractSection(md, /^#{1,3}\s*👥\s*RÉSEAU\s*&\s*CONTACTS\b/im);
+  if (!sec) return [];
+
+  const contacts = [];
+  for (const line of sec.split('\n')) {
+    // - **Name** | Dernier contact : X | Fréquence : Y | Role | #Tag
+    const m = line.match(/^\s*-\s*\*\*(.+?)\*\*\s*\|(.+)$/);
+    if (!m) continue;
+    const name  = m[1].trim();
+    const rest  = m[2];
+    const parts = rest.split('|').map(p => p.trim());
+
+    const lastM = parts.find(p => /dernier contact/i.test(p));
+    const freqM = parts.find(p => /fréquence/i.test(p));
+    const role  = parts.find(p => !p.startsWith('#') && !/dernier|fréquence/i.test(p) && p) || '';
+    const tags  = parts.filter(p => p.startsWith('#')).join(' ');
+
+    const last  = lastM ? lastM.replace(/dernier contact\s*:\s*/i,'').trim() : '—';
+    const freq  = freqM ? freqM.replace(/fréquence souhaitée\s*:\s*/i,'').trim() : '';
+
+    contacts.push({ name, last, freq, role, tags });
+  }
+  return contacts;
+}
+
+/* ── RÉFLEXIONS ── */
+function parseReflections(md) {
+  const sec = extractSection(md, /^#{1,3}\s*🧠\s*RÉFLEXIONS\s+OUVERTES\b/im);
+  if (!sec) return [];
+
+  const reflects = [];
+  const blocks = sec.split(/^###\s+/m).slice(1);
+
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const title = lines[0].trim();
+    const items = {};
+
+    for (const line of lines.slice(1)) {
+      const m = line.match(/^\s*-\s*(.+?)\s*:\s*(.+)$/);
+      if (m) items[m[1].trim()] = m[2].trim();
+    }
+
+    const tags = (items['Tags'] || '').split(',').map(t=>t.trim()).filter(Boolean);
+    if (title) reflects.push({ title, items, tags });
+  }
+  return reflects;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDERERS
+═══════════════════════════════════════════════════════ */
+function renderInbox(entities) {
+  const count = $('inbox-count');
+  const body  = $('inbox-body');
+  const n = entities.length;
+
+  count.textContent = n;
+  count.className   = 'card-count' + (n > 0 ? ' has-items' : '');
+
+  if (n === 0) { body.innerHTML = '<div class="empty">Inbox vide — bien joué.</div>'; return; }
+
+  body.innerHTML = entities.map(e => {
+    const relevantFields = Object.entries(e.fields).filter(([k]) =>
+      !k.includes('Statut') && k !== '---'
+    );
+
+    return `<div class="inbox-entity">
+      <div class="inbox-head">
+        ${typeBadge(e.type)}
+        <span class="inbox-title">${esc(e.title)}</span>
+        ${e.fields['✅ Statut'] ? badgeStatus(e.fields['✅ Statut']) : badgeStatus('À vérifier')}
+      </div>
+      <div class="inbox-fields">
+        ${relevantFields.map(([k,v]) => `
+          <div class="inbox-field">
+            <span class="inbox-field-key">${esc(k)}</span>
+            <span>${esc(v)}</span>
+          </div>`).join('')}
+      </div>
+      ${e.note ? `<div class="inbox-note">💡 ${esc(e.note.slice(0,180))}${e.note.length>180?'…':''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderCalendar(items) {
+  const count = $('cal-count');
+  const body  = $('cal-body');
+  const n = items.length;
+
+  count.textContent = n;
+  count.className   = 'card-count' + (n > 0 ? ' has-items' : '');
+
+  if (n === 0) { body.innerHTML = '<div class="empty">Aucun événement à venir.</div>'; return; }
+
+  // Group by events vs tasks
+  let html = '';
+  const events = items.filter(i => !i.status || !/^-?$/.test(i.status));
+
+  html = events.map(item => {
+    const cls  = dateClass(item.isoDate);
+    const disp = fmtDate(item.isoDate);
+    const isTask = /TÂCHE|tâche|task/i.test(item.tags + item.label);
+
+    return `<div class="timeline-row">
+      <span class="tl-date ${cls}">${esc(disp)}</span>
+      <span class="tl-dot ${cls || (isTask ? 'task' : 'event')}"></span>
+      <div class="tl-text">
+        <div>${esc(item.label)}</div>
+        ${item.people ? `<div class="tl-people">${esc(item.people)}</div>` : ''}
+      </div>
+      ${badgeStatus(item.status)}
+    </div>`;
+  }).join('');
+
+  body.innerHTML = html || '<div class="empty">Aucun événement à venir.</div>';
+}
+
+function renderProjects(projects) {
+  const count = $('proj-count');
+  const body  = $('proj-body');
+  const n = projects.length;
+
+  count.textContent = n;
+  count.className   = 'card-count' + (n > 0 ? ' has-items' : '');
+
+  if (n === 0) { body.innerHTML = '<div class="empty">Aucun projet.</div>'; return; }
+
+  // Responsive grid of project cards
+  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+    ${projects.map(p => `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;">
+        <div class="proj-name">${esc(p.name)}</div>
+        ${p.items.map(item => {
+          const isNext = /prochaine|next|étape/i.test(item.key);
+          return `<div class="proj-item" ${isNext ? 'style="color:var(--text)"' : ''}>
+            <span class="proj-key" style="${isNext ? 'color:var(--accent)' : ''}">${esc(item.key)}</span>
+            <span>${esc(item.val)}</span>
+          </div>`;
+        }).join('')}
+      </div>`).join('')}
+  </div>`;
+}
+
+function renderTasks(tasks) {
+  const count = $('task-count');
+  const body  = $('task-body');
+
+  const pending = tasks.filter(t => !/archiv/i.test(t.status));
+  count.textContent = pending.length;
+  count.className   = 'card-count' + (pending.length > 0 ? ' has-items' : '');
+
+  if (pending.length === 0) { body.innerHTML = '<div class="empty">Aucune tâche en cours.</div>'; return; }
+
+  // Group by status
+  const groups = {
+    'À vérifier' : pending.filter(t => /vérif/i.test(t.status)),
+    'En attente' : pending.filter(t => /attente/i.test(t.status)),
+    'Validé'     : pending.filter(t => /valid/i.test(t.status)),
+    'Autre'      : pending.filter(t => !t.status),
+  };
+
+  let html = '';
+  for (const [grp, items] of Object.entries(groups)) {
+    if (!items.length) continue;
+    html += `<div class="section-head">${esc(grp)} (${items.length})</div>`;
+    html += items.map(t => `
+      <div class="row">
+        <div class="row-main">
+          <div class="row-title">${esc(t.label)}</div>
+          ${t.proj ? `<div class="row-sub">${esc(t.proj)}</div>` : ''}
+        </div>
+        <div class="row-right">${badgeStatus(t.status)}</div>
+      </div>`).join('');
+  }
+
+  body.innerHTML = html;
+}
+
+function renderRoutines(routines) {
+  const count = $('routine-count');
+  const body  = $('routine-body');
+  const n = routines.length;
+
+  count.textContent = n;
+  count.className   = 'card-count' + (n > 0 ? ' has-items' : '');
+
+  if (n === 0) { body.innerHTML = '<div class="empty">Aucune routine définie.</div>'; return; }
+
+  body.innerHTML = routines.map(r => `
+    <div class="row">
+      <div class="row-main">
+        <div class="row-title">${esc(r.label)}</div>
+        <div class="row-sub">${esc([r.freq, r.timing].filter(Boolean).join(' · '))}</div>
+      </div>
+      <div class="row-right">${badgeStatus(r.status)}</div>
+    </div>`).join('');
+}
+
+function renderNetwork(contacts) {
+  const count = $('net-count');
+  const body  = $('net-body');
+  const n = contacts.length;
+
+  count.textContent = n;
+  count.className   = 'card-count' + (n > 0 ? ' has-items' : '');
+
+  if (n === 0) { body.innerHTML = '<div class="empty">Aucun contact.</div>'; return; }
+
+  body.innerHTML = contacts.map(c => {
+    const initials = c.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="contact-row">
+      <div class="contact-avatar">${esc(initials)}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="contact-name">${esc(c.name)}</div>
+        <div class="contact-meta">Dernier : ${esc(c.last)}</div>
+        ${c.freq ? `<div class="contact-freq">Fréquence : ${esc(c.freq)}</div>` : ''}
+      </div>
+      ${c.role ? `<span class="tag">${esc(c.role)}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderReflections(reflects) {
+  const count = $('reflect-count');
+  const body  = $('reflect-body');
+  const n = reflects.length;
+
+  count.textContent = n;
+  count.className   = 'card-count' + (n > 0 ? ' has-items' : '');
+
+  if (n === 0) { body.innerHTML = '<div class="empty">Aucune réflexion ouverte.</div>'; return; }
+
+  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+    ${reflects.map(r => `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;">
+        <div style="font-family:'Playfair Display',serif;font-size:0.88rem;color:var(--accent);margin-bottom:8px;line-height:1.3;">
+          ${esc(r.title)}
+        </div>
+        ${Object.entries(r.items).filter(([k])=>k!=='Tags').map(([k,v]) => `
+          <div class="proj-item">
+            <span class="proj-key">${esc(k)}</span>
+            <span>${esc(v)}</span>
+          </div>`).join('')}
+        ${r.tags.length ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">
+          ${r.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}
+        </div>` : ''}
+      </div>`).join('')}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN
+═══════════════════════════════════════════════════════ */
+function showError(msg) {
+  $('loader').classList.add('hidden');
+  const el = $('error-banner');
+  el.innerHTML = `<strong>Erreur de chargement</strong><br>${msg}<br><br>
+    <a href="index.html" style="color:var(--error);text-decoration:underline">→ Ouvre index.html pour configurer</a>`;
+  el.classList.remove('hidden');
+}
+
+async function load() {
+  $('loader').classList.remove('hidden');
+  $('error-banner').classList.add('hidden');
+  $('grid').hidden = true;
+  $('loader-text').textContent = 'Récupération du fichier GitHub…';
+
+  const cfg = loadCfg();
+
+  if (!cfg.githubToken || !cfg.githubRepo || !cfg.githubFile) {
+    return showError('Configuration manquante — token, repo ou chemin non défini.<br>La configuration est partagée avec index.html via le localStorage.');
+  }
+
+  try {
+    const md = await fetchMD(cfg);
+
+    $('loader-text').textContent = 'Analyse du Markdown…';
+
+    const inbox     = parseInbox(md);
+    const calendar  = parseCalendar(md);
+    const projects  = parseProjects(md);
+    const tasks     = parseTasks(md);
+    const routines  = parseRoutines(md);
+    const network   = parseNetwork(md);
+    const reflects  = parseReflections(md);
+
+    renderInbox(inbox);
+    renderCalendar(calendar);
+    renderProjects(projects);
+    renderTasks(tasks);
+    renderRoutines(routines);
+    renderNetwork(network);
+    renderReflections(reflects);
+
+    $('loader').classList.add('hidden');
+    $('grid').hidden = false;
+
+  } catch(err) {
+    showError(esc(err.message));
+    console.error('[Dashboard]', err);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  $('topbar-date').textContent = todayFR();
+
+  // Lien "Ajouter une note" — même dossier
+  const cfg = loadCfg();
+  const indexHref = 'index.html';
+  $('btn-add').href = indexHref;
+
+  $('btn-refresh').addEventListener('click', load);
+
+  load();
+});
+</script>
+</body>
+</html>
