@@ -777,57 +777,76 @@ const TRIAGE = {
 
 function triageCount() { return Object.keys(TRIAGE.changes).length; }
 
-/* Remplace le statut d'une entité dans le Markdown brut.
-   Cherche la ligne ### … — <title> puis la ligne | ✅ Statut | … | */
-function patchStatus(md, title, newStatus) {
-  // Échappe les caractères regex dans le titre
-  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Trouve le bloc ### … — <title>
-  const headRe  = new RegExp(`^###[^\\n]+[—\\-–]\\s*${escaped}\\s*$`, 'm');
-  const headM   = headRe.exec(md);
-  if (!headM) { console.warn('[Triage] bloc introuvable:', title); return md; }
+/* Remplace le statut dans un bloc connu — recherche par texte exact, pas regex */
+function patchStatus(md, rawBlock, newStatus) {
+  // Cherche le bloc exact dans le markdown
+  const idx = md.indexOf(rawBlock);
+  if (idx === -1) {
+    // Fallback : cherche juste la ligne ### … du bloc
+    const headLine = rawBlock.split('\n').find(l => l.startsWith('###'));
+    if (!headLine) { console.warn('[Triage] patchStatus: bloc introuvable'); return md; }
+    const headIdx = md.indexOf(headLine);
+    if (headIdx === -1) { console.warn('[Triage] patchStatus: header introuvable'); return md; }
+    // Recalcule blockEnd depuis headIdx
+    const blockEnd = md.indexOf('\n---', headIdx + 1);
+    const slice    = blockEnd !== -1 ? md.slice(headIdx, blockEnd) : md.slice(headIdx);
+    const patched  = replaceStatutLine(slice, newStatus);
+    if (blockEnd !== -1) return md.slice(0, headIdx) + patched + md.slice(blockEnd);
+    return md.slice(0, headIdx) + patched;
+  }
 
-  // Dans ce bloc (jusqu'au prochain ---), remplace la ligne Statut
-  const blockStart = headM.index;
-  const blockEnd   = md.indexOf('\n---', blockStart + 1);
-  const slice      = blockEnd !== -1 ? md.slice(blockStart, blockEnd) : md.slice(blockStart);
+  const patched = replaceStatutLine(rawBlock, newStatus);
+  return md.slice(0, idx) + patched + md.slice(idx + rawBlock.length);
+}
 
-  const patched = slice.replace(
-    /(\|\s*✅\s*Statut\s*\|\s*)(\[?[^\]|]*\]?)(\s*\|)/,
-    `$1[${newStatus}]$3`
-  );
-  if (blockEnd !== -1) return md.slice(0, blockStart) + patched + md.slice(blockEnd);
-  return md.slice(0, blockStart) + patched;
+/* Remplace la ligne | Statut | … | dans un bloc */
+function replaceStatutLine(block, newStatus) {
+  // Cherche la ligne contenant "Statut" dans la colonne clé du tableau
+  const lines = block.split('\n');
+  const out   = lines.map(line => {
+    // Ligne de tableau avec "Statut" quelque part dans la première cellule
+    if (/^\|\s*[^|]*[Ss]tatut[^|]*\|/.test(line)) {
+      // Remplace le contenu de la deuxième cellule
+      return line.replace(/(\|[^|]+\|)\s*(\[?[^\]|]*\]?)\s*(\|)/, `$1 [${newStatus}] $3`);
+    }
+    return line;
+  });
+  return out.join('\n');
 }
 
 /* Déplace un bloc de l'INBOX vers la section ARCHIVE */
-function archiveBlock(md, title) {
-  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const headRe  = new RegExp(`^###[^\\n]+[—\\-–]\\s*${escaped}\\s*$`, 'm');
-  const headM   = headRe.exec(md);
-  if (!headM) return md;
+function archiveBlock(md, rawBlock) {
+  const idx = md.indexOf(rawBlock);
+  if (idx === -1) return md;
 
-  const blockStart = headM.index;
-  // Inclut le --- précédant (une ligne avant le bloc si présente)
-  const pre     = md.lastIndexOf('\n---\n', blockStart);
-  const cutFrom = pre !== -1 ? pre : blockStart;
-  const cutTo   = md.indexOf('\n---', blockStart + 1);
-  const block   = cutTo !== -1 ? md.slice(cutFrom, cutTo) : md.slice(cutFrom);
+  // Remonte pour inclure le --- séparateur précédant le bloc
+  const before = md.slice(0, idx);
+  const sepIdx = before.lastIndexOf('\n---\n');
+  const cutFrom = sepIdx !== -1 ? sepIdx : idx;
+  const cutTo   = idx + rawBlock.length;
 
-  // Retire le bloc de l'INBOX
-  let patched = cutTo !== -1
-    ? md.slice(0, cutFrom) + md.slice(cutTo)
-    : md.slice(0, cutFrom);
+  // Texte complet du bloc à déplacer (avec son séparateur ---),
+  // nettoyé pour l'archive
+  const blockText = md.slice(cutFrom, cutTo).trim();
 
-  // Insère dans ARCHIVE juste avant le commentaire ou en fin de section
+  // Retire le bloc de sa position actuelle
+  let patched = md.slice(0, cutFrom) + md.slice(cutTo);
+
+  // Insère dans ARCHIVE
   const archMarker = '<!-- Archivage progressif lors des revues -->';
   const archIdx    = patched.indexOf(archMarker);
-  const insertion  = '\n' + block.trim() + '\n\n';
+  const insertion  = '\n\n' + blockText + '\n';
 
   if (archIdx !== -1) {
     patched = patched.slice(0, archIdx) + insertion + patched.slice(archIdx);
   } else {
-    patched = patched.trimEnd() + insertion;
+    // Cherche la section ARCHIVE et insère en fin
+    const archSec = patched.lastIndexOf('## 🗄️ ARCHIVE');
+    if (archSec !== -1) {
+      patched = patched.slice(0, patched.length) + insertion;
+    } else {
+      patched = patched.trimEnd() + insertion;
+    }
   }
   return patched;
 }
@@ -835,12 +854,12 @@ function archiveBlock(md, title) {
 /* Applique tous les changements en attente au rawMd */
 function applyAllChanges() {
   let md = TRIAGE.rawMd;
-  for (const { title, newStatus, archive } of Object.values(TRIAGE.changes)) {
+  for (const { raw, newStatus, archive } of Object.values(TRIAGE.changes)) {
     if (archive) {
-      md = patchStatus(md, title, 'Archivé');
-      md = archiveBlock(md, title);
+      md = patchStatus(md, raw, 'Archivé');
+      md = archiveBlock(md, raw);
     } else {
-      md = patchStatus(md, title, newStatus);
+      md = patchStatus(md, raw, newStatus);
     }
   }
   return md;
@@ -882,7 +901,7 @@ function parseInbox() {
     const noteLines = [...block.matchAll(/^>\s*(.+)$/gm)].map(r => r[1]);
     const note = noteLines.join(' ').replace(/💡\s*Note IA\s*:\s*/i, '').trim();
 
-    entities.push({ type, title, fields, note });
+    entities.push({ type, title, fields, note, raw: block });
   }
   return entities;
 }
@@ -1070,28 +1089,33 @@ async function handleSave() {
   try {
     const newMd = applyAllChanges();
     await putMD(cfg, newMd, TRIAGE.sha);
-    // Reload complet pour resync avec GitHub
-    await load();
+    // Reload pour resync — on force le rechargement même si erreur
+    try { await load(); } catch(e) { /* load gère son propre affichage */ }
   } catch(err) {
+    // Erreur PUT GitHub — affiche dans la save bar
+    $('save-bar-label').textContent = '❌ ' + err.message;
+  } finally {
+    // Toujours réactiver le bouton
     btn.disabled = false;
     btn.textContent = 'Sauvegarder';
-    alert('Erreur : ' + err.message);
   }
 }
 
 /* ── TRIAGE BUTTON HANDLER ── */
+let _inboxEntities = [];   // kept in sync after each renderInbox
+
 function onTriageBtn(btn) {
   const idx       = parseInt(btn.dataset.idx, 10);
-  const title     = btn.dataset.title;
   const newStatus = btn.dataset.status;
   const archive   = btn.dataset.archive === '1';
+  const entity    = _inboxEntities[idx];
+  if (!entity) return;
 
-  // Toggle : re-clic sur le même statut actif → annule
   const existing = TRIAGE.changes[idx];
   if (existing && existing.newStatus === newStatus) {
     delete TRIAGE.changes[idx];
   } else {
-    TRIAGE.changes[idx] = { title, newStatus, archive };
+    TRIAGE.changes[idx] = { raw: entity.raw, newStatus, archive };
   }
   updateSaveBar();
   refreshEntityCard(idx, TRIAGE.changes[idx]?.newStatus);
@@ -1113,6 +1137,7 @@ function refreshEntityCard(idx, activeStatus) {
 
 /* ── RENDER INBOX (avec triage) ── */
 function renderInbox(entities) {
+  _inboxEntities = entities;   // store for onTriageBtn
   const count = $('inbox-count');
   const body  = $('inbox-body');
   const n = entities.length;
