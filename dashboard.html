@@ -1080,16 +1080,20 @@ async function handleSave() {
 }
 
 /* ── TRIAGE BUTTON HANDLER ── */
-function onTriageBtn(idx, title, newStatus, archive) {
-  // Toggle : re-clic sur le même statut → annule
+function onTriageBtn(btn) {
+  const idx       = parseInt(btn.dataset.idx, 10);
+  const title     = btn.dataset.title;
+  const newStatus = btn.dataset.status;
+  const archive   = btn.dataset.archive === '1';
+
+  // Toggle : re-clic sur le même statut actif → annule
   const existing = TRIAGE.changes[idx];
-  if (existing && existing.newStatus === newStatus && !archive) {
+  if (existing && existing.newStatus === newStatus) {
     delete TRIAGE.changes[idx];
   } else {
-    TRIAGE.changes[idx] = { title, newStatus, archive: !!archive };
+    TRIAGE.changes[idx] = { title, newStatus, archive };
   }
   updateSaveBar();
-  // Mise à jour visuelle de la carte
   refreshEntityCard(idx, TRIAGE.changes[idx]?.newStatus);
 }
 
@@ -1139,18 +1143,12 @@ function renderInbox(entities) {
       </div>
       ${e.note ? `<div class="inbox-note">💡 ${esc(e.note.slice(0,180))}${e.note.length>180?'…':''}</div>` : ''}
       <div class="triage-bar">
-        <button class="triage-btn" data-status="Validé"
-          onclick="onTriageBtn(${idx}, ${JSON.stringify(e.title)}, 'Validé', false)">
-          ✓ Validé
-        </button>
-        <button class="triage-btn" data-status="En attente"
-          onclick="onTriageBtn(${idx}, ${JSON.stringify(e.title)}, 'En attente', false)">
-          ⏳ En attente
-        </button>
-        <button class="triage-btn triage-archive" data-status="Archivé"
-          onclick="onTriageBtn(${idx}, ${JSON.stringify(e.title)}, 'Archivé', true)">
-          → Archiver
-        </button>
+        <button class="triage-btn" data-idx="${idx}" data-status="Validé" data-title="${esc(e.title)}" data-archive="0"
+          onclick="onTriageBtn(this)">✓ Validé</button>
+        <button class="triage-btn" data-idx="${idx}" data-status="En attente" data-title="${esc(e.title)}" data-archive="0"
+          onclick="onTriageBtn(this)">⏳ En attente</button>
+        <button class="triage-btn triage-archive" data-idx="${idx}" data-status="Archivé" data-title="${esc(e.title)}" data-archive="1"
+          onclick="onTriageBtn(this)">→ Archiver</button>
       </div>
     </div>`;
   }).join('');
