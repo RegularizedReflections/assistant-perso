@@ -454,7 +454,7 @@
   </div>
 
   <!-- RÉSEAU -->
-  <div class="card">
+  <div class="card span2">
     <div class="card-head">
       <span class="card-label">👥 Réseau</span>
       <span class="card-count" id="net-count">0</span>
@@ -465,7 +465,7 @@
   </div>
 
   <!-- RÉFLEXIONS -->
-  <div class="card span2">
+  <div class="card span3">
     <div class="card-head">
       <span class="card-label">🧠 Réflexions ouvertes</span>
       <span class="card-count" id="reflect-count">0</span>
@@ -554,15 +554,21 @@ function esc(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function extractSection(md, pattern) {
-  const m = pattern.exec(md);
-  if (!m) return '';
-  const start = m.index;
-  const after = md.indexOf('\n', start) + 1;
-  const tail  = md.slice(after);
-  const next  = tail.match(/^#{1,2} [^#]/m);
-  const end   = next ? after + next.index : md.length;
-  return md.slice(start, end);
+/* extractSection — essaie plusieurs patterns, s'arrête au prochain ## */
+function extractSection(md, patterns) {
+  const list = Array.isArray(patterns) ? patterns : [patterns];
+  for (const pat of list) {
+    const m = pat.exec(md);
+    if (!m) continue;
+    const start = m.index;
+    const after = md.indexOf('\n', start) + 1;
+    const tail  = md.slice(after);
+    const next  = tail.match(/^#{1,2}\s+[^\s#\n]/m);
+    const end   = next ? after + next.index : md.length;
+    const sec   = md.slice(start, end);
+    if (sec.trim().length > 10) return sec;
+  }
+  return '';
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -604,35 +610,36 @@ async function fetchMD(cfg) {
 
 /* ── INBOX ── */
 function parseInbox(md) {
-  const sec = extractSection(md, /^#{1,3}\s*📥\s*INBOX\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*📥\s*INBOX\b/im,
+    /^#{1,3}\s*INBOX\b/im,
+  ]);
   if (!sec) return [];
 
   const entities = [];
-  // Split on --- delimiters to get individual entities
   const blocks = sec.split(/^---$/m).map(b => b.trim()).filter(Boolean);
 
   for (const block of blocks) {
-    // Must have a ### TYPE — Title line
-    const headM = block.match(/^###\s+(.+?)(?:\s*—\s*|\s*-\s*)(.+)$/m);
+    // ### 📅 ÉVÉNEMENT — Titre  ou  ### ✅ TÂCHE — Titre
+    const headM = block.match(/^###\s+(.+?)(?:\s+[—\-–]\s*)(.+)$/m);
     if (!headM) continue;
 
     const type  = headM[1].trim();
     const title = headM[2].trim();
 
-    // Parse table rows
+    // Parse tableau Markdown : | Clé | Valeur |
     const fields = {};
-    const tableRows = [...block.matchAll(/\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/g)];
-    for (const row of tableRows) {
-      const key = row[1].trim().replace(/[📅🏷️👤📁💼✅]/gu,'').trim();
+    for (const row of block.matchAll(/^\|\s*([^|\-][^|]*?)\s*\|\s*([^|]+?)\s*\|/gm)) {
+      const key = row[1].replace(/[\u{1F300}-\u{1FFFF}]/gu, '').trim();
       const val = row[2].trim();
-      if (key && val && !val.startsWith('-')) fields[key] = val;
+      if (key && val && val !== '...' && !key.startsWith('-')) fields[key] = val;
     }
 
-    // Parse Note IA
-    const noteM = block.match(/>\s*💡\s*Note IA\s*:\s*(.+?)(?=\n(?!>)|$)/s);
-    const note  = noteM ? noteM[1].replace(/^>\s*/gm,'').trim() : '';
+    // Note IA (lignes de blockquote)
+    const noteLines = [...block.matchAll(/^>\s*(.+)$/gm)].map(r => r[1]);
+    const note = noteLines.join(' ').replace(/💡\s*Note IA\s*:\s*/i, '').trim();
 
-    entities.push({ type, title, fields, note });
+    entities.push({ type, title, fields, note, raw: block });
   }
 
   return entities;
@@ -640,55 +647,70 @@ function parseInbox(md) {
 
 /* ── CALENDRIER ── */
 function parseCalendar(md) {
-  const sec = extractSection(md, /^#{1,3}\s*📅\s*CALENDRIER\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*📅\s*CALENDRIER\b/im,
+    /^#{1,3}\s*CALENDRIER\b/im,
+  ]);
   if (!sec) return [];
 
   const items = [];
-  const lines = sec.split('\n');
-
-  for (const line of lines) {
-    // - **2026-03-15** : Label | People | #Tags | [Status]
-    const m = line.match(/^\s*-\s*\*\*(\d{4}-\d{2}-\d{2})\*\*\s*:\s*(.+)$/);
+  for (const line of sec.split('\n')) {
+    // Supporte : - **2026-03-15** : Label | ... ou - **2026-03-15**: Label
+    const m = line.match(/^\s*-\s*\*\*(\d{4}-\d{2}-\d{2})\*\*\s*:?\s*(.+)$/);
     if (!m) continue;
 
     const isoDate = m[1];
-    const rest    = m[2];
-    const parts   = rest.split('|').map(p => p.trim());
+    const rest    = m[2].trim();
+    // Nettoie les éventuels italiques *...*
+    const clean   = rest.replace(/\*([^*]+)\*/g, '$1');
+    const parts   = clean.split('|').map(p => p.trim()).filter(Boolean);
 
     const label   = parts[0] || '';
-    const people  = parts.slice(1).find(p => !p.startsWith('#') && !p.startsWith('[')) || '';
+    const people  = parts.slice(1).find(p => !p.startsWith('#') && !p.match(/^\[.+\]$/)) || '';
     const tags    = parts.filter(p => p.startsWith('#')).join(' ');
-    const status  = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g,'');
+    const statusRaw = parts.find(p => /^\[.+\]$/.test(p)) || '';
+    const status  = statusRaw.replace(/[\[\]]/g, '');
 
     const d = parseDate(isoDate);
     if (!d) continue;
     const diff = dateDiff(d);
-    // Only show +30 days and past (overdue only)
-    if (diff > 30) continue;
+    // Fenêtre : 14 jours passés → 60 jours à venir
+    if (diff < -14 || diff > 60) continue;
+    if (!label) continue;
 
     items.push({ isoDate, label, people, tags, status, diff });
   }
 
-  return items.sort((a,b) => a.diff - b.diff);
+  return items.sort((a, b) => a.diff - b.diff);
 }
 
 /* ── PROJETS ── */
 function parseProjects(md) {
-  const sec = extractSection(md, /^#{1,3}\s*📁\s*PROJETS\s+ACTIFS\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*📁\s*PROJETS\s+ACTIFS\b/im,
+    /^#{1,3}\s*PROJETS\s+ACTIFS\b/im,
+    /^#{1,3}\s*PROJETS\b/im,
+  ]);
   if (!sec) return [];
 
   const projects = [];
-  // Each project starts with ###
+  // Chaque projet commence par ### Nom
   const blocks = sec.split(/^###\s+/m).slice(1);
 
   for (const block of blocks) {
-    const lines = block.split('\n');
+    const lines = block.split('\n').filter(l => l.trim());
     const name  = lines[0].trim();
     const items = [];
 
     for (const line of lines.slice(1)) {
+      // - Clé : Valeur
       const m = line.match(/^\s*-\s*(.+?)\s*:\s*(.+)$/);
       if (m) items.push({ key: m[1].trim(), val: m[2].trim() });
+      // ligne simple sans ":"
+      else {
+        const s = line.match(/^\s*-\s*(.+)$/);
+        if (s) items.push({ key: '', val: s[1].trim() });
+      }
     }
 
     if (name) projects.push({ name, items });
@@ -699,65 +721,81 @@ function parseProjects(md) {
 
 /* ── TÂCHES ── */
 function parseTasks(md) {
-  const sec = extractSection(md, /^#{1,3}\s*✅\s*TÂCHES\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*✅\s*TÂCHES\b/im,
+    /^#{1,3}\s*TÂCHES\b/im,
+    /^#{1,3}\s*TACHES\b/im,
+  ]);
   if (!sec) return [];
 
   const tasks = [];
   for (const line of sec.split('\n')) {
     const m = line.match(/^\s*-\s*(.+)$/);
     if (!m) continue;
-    const raw   = m[1];
-    const parts = raw.split('|').map(p => p.trim());
+    const parts  = m[1].split('|').map(p => p.trim());
     const label  = parts[0];
-    const status = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g,'');
+    const status = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g, '');
     const tags   = parts.filter(p => p.startsWith('#')).join(' ');
-    const proj   = parts.find(p => !p.startsWith('#') && !p.startsWith('[') && p !== label) || '';
-    if (label) tasks.push({ label, status, tags, proj });
+    const proj   = parts.find(p => p && !p.startsWith('#') && !/^\[.+\]$/.test(p) && p !== label) || '';
+    if (label && label.length > 2) tasks.push({ label, status, tags, proj });
   }
   return tasks;
 }
 
 /* ── ROUTINES ── */
 function parseRoutines(md) {
-  const sec = extractSection(md, /^#{1,3}\s*🎯\s*ROUTINES\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*🎯\s*ROUTINES\b/im,
+    /^#{1,3}\s*ROUTINES\b/im,
+  ]);
   if (!sec) return [];
 
   const routines = [];
   for (const line of sec.split('\n')) {
     const m = line.match(/^\s*-\s*(.+)$/);
     if (!m) continue;
-    const parts = m[1].split('|').map(p => p.trim());
-    const label = parts[0];
-    const freq  = parts[1] || '';
-    const timing= parts[2] || '';
-    const tags  = parts.filter(p => p.startsWith('#')).join(' ');
-    const status= (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g,'');
-    if (label) routines.push({ label, freq, timing, tags, status });
+    const parts  = m[1].split('|').map(p => p.trim());
+    const label  = parts[0];
+    const freq   = parts[1] || '';
+    const timing = parts[2] || '';
+    const tags   = parts.filter(p => p.startsWith('#')).join(' ');
+    const status = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g, '');
+    if (label && label.length > 2) routines.push({ label, freq, timing, tags, status });
   }
   return routines;
 }
 
 /* ── RÉSEAU ── */
 function parseNetwork(md) {
-  const sec = extractSection(md, /^#{1,3}\s*👥\s*RÉSEAU\s*&\s*CONTACTS\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*👥\s*RÉSEAU\s*&\s*CONTACTS\b/im,
+    /^#{1,3}\s*RÉSEAU\s*[&et]+\s*CONTACTS\b/im,
+    /^#{1,3}\s*RÉSEAU\b/im,
+  ]);
   if (!sec) return [];
 
   const contacts = [];
   for (const line of sec.split('\n')) {
-    // - **Name** | Dernier contact : X | Fréquence : Y | Role | #Tag
+    // - **Nom** | champ | champ
     const m = line.match(/^\s*-\s*\*\*(.+?)\*\*\s*\|(.+)$/);
     if (!m) continue;
     const name  = m[1].trim();
-    const rest  = m[2];
-    const parts = rest.split('|').map(p => p.trim());
+    const parts = m[2].split('|').map(p => p.trim());
 
     const lastM = parts.find(p => /dernier contact/i.test(p));
     const freqM = parts.find(p => /fréquence/i.test(p));
-    const role  = parts.find(p => !p.startsWith('#') && !/dernier|fréquence/i.test(p) && p) || '';
     const tags  = parts.filter(p => p.startsWith('#')).join(' ');
+    const role  = parts.find(p =>
+      p && !p.startsWith('#') &&
+      !/dernier|fréquence/i.test(p)
+    ) || '';
 
-    const last  = lastM ? lastM.replace(/dernier contact\s*:\s*/i,'').trim() : '—';
-    const freq  = freqM ? freqM.replace(/fréquence souhaitée\s*:\s*/i,'').trim() : '';
+    const last = lastM
+      ? lastM.replace(/dernier contact\s*:\s*/i, '').trim()
+      : '—';
+    const freq = freqM
+      ? freqM.replace(/fréquence souhaitée\s*:\s*/i, '').trim()
+      : '';
 
     contacts.push({ name, last, freq, role, tags });
   }
@@ -766,24 +804,31 @@ function parseNetwork(md) {
 
 /* ── RÉFLEXIONS ── */
 function parseReflections(md) {
-  const sec = extractSection(md, /^#{1,3}\s*🧠\s*RÉFLEXIONS\s+OUVERTES\b/im);
+  const sec = extractSection(md, [
+    /^#{1,3}\s*🧠\s*RÉFLEXIONS\s+OUVERTES\b/im,
+    /^#{1,3}\s*RÉFLEXIONS\s+OUVERTES\b/im,
+    /^#{1,3}\s*RÉFLEXIONS\b/im,
+  ]);
   if (!sec) return [];
 
   const reflects = [];
   const blocks = sec.split(/^###\s+/m).slice(1);
 
   for (const block of blocks) {
-    const lines = block.split('\n');
-    const title = lines[0].trim();
-    const items = {};
+    const lines  = block.split('\n');
+    const title  = lines[0].trim();
+    const fields = {};
 
     for (const line of lines.slice(1)) {
       const m = line.match(/^\s*-\s*(.+?)\s*:\s*(.+)$/);
-      if (m) items[m[1].trim()] = m[2].trim();
+      if (m) fields[m[1].trim()] = m[2].trim();
     }
 
-    const tags = (items['Tags'] || '').split(',').map(t=>t.trim()).filter(Boolean);
-    if (title) reflects.push({ title, items, tags });
+    const tagsRaw = fields['Tags'] || fields['tags'] || '';
+    const tags    = tagsRaw.split(/[,\s]+/).map(t => t.trim()).filter(t => t.startsWith('#'));
+    const revue   = fields['Revue suggérée'] || fields['Revue'] || '';
+
+    if (title) reflects.push({ title, fields, tags, revue, raw: block });
   }
   return reflects;
 }
@@ -972,21 +1017,39 @@ function renderReflections(reflects) {
 
   if (n === 0) { body.innerHTML = '<div class="empty">Aucune réflexion ouverte.</div>'; return; }
 
-  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
-    ${reflects.map(r => `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;">
-        <div style="font-family:'Playfair Display',serif;font-size:0.88rem;color:var(--accent);margin-bottom:8px;line-height:1.3;">
+  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;">
+    ${reflects.map(r => {
+      // Construit la note à pré-remplir dans index.html
+      const noteText = `[Réflexion à transformer]\n\n${r.title}\n\n`
+        + Object.entries(r.fields)
+            .filter(([k]) => !/(tags|tag)/i.test(k))
+            .map(([k,v]) => `${k} : ${v}`)
+            .join('\n');
+      const encodedNote = encodeURIComponent(noteText);
+
+      return `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-family:'Playfair Display',serif;font-size:0.9rem;color:var(--accent);line-height:1.35;">
           ${esc(r.title)}
         </div>
-        ${Object.entries(r.items).filter(([k])=>k!=='Tags').map(([k,v]) => `
+        ${Object.entries(r.fields).filter(([k])=>!/(tags|tag)/i.test(k)).map(([k,v]) => `
           <div class="proj-item">
             <span class="proj-key">${esc(k)}</span>
             <span>${esc(v)}</span>
           </div>`).join('')}
-        ${r.tags.length ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">
+        ${r.tags.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;">
           ${r.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}
         </div>` : ''}
-      </div>`).join('')}
+        <a href="index.html?note=${encodedNote}"
+           style="margin-top:auto;display:inline-flex;align-items:center;gap:5px;
+                  font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;
+                  color:var(--accent);text-decoration:none;border:1px solid rgba(200,169,110,0.28);
+                  border-radius:4px;padding:5px 9px;transition:background 0.15s;"
+           onmouseover="this.style.background='rgba(200,169,110,0.1)'"
+           onmouseout="this.style.background=''"
+        >→ Transformer en tâche</a>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
