@@ -554,21 +554,70 @@ function esc(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-/* extractSection — essaie plusieurs patterns, s'arrête au prochain ## */
-function extractSection(md, patterns) {
-  const list = Array.isArray(patterns) ? patterns : [patterns];
-  for (const pat of list) {
-    const m = pat.exec(md);
-    if (!m) continue;
-    const start = m.index;
-    const after = md.indexOf('\n', start) + 1;
-    const tail  = md.slice(after);
-    const next  = tail.match(/^#{1,2}\s+[^\s#\n]/m);
-    const end   = next ? after + next.index : md.length;
-    const sec   = md.slice(start, end);
-    if (sec.trim().length > 10) return sec;
+/* ─────────────────────────────────────────────────────────
+   SECTION INDEX — machine d'état ligne par ligne
+   Robuste : pas de regex emoji, pas d'ambiguité Unicode
+   ───────────────────────────────────────────────────────── */
+let _SECTIONS = null;   // { normalizedKey: linesArray }
+let _SEC_HEADS = null;  // original header strings (for debug)
+
+function normalizeKey(s) {
+  // Retire les emoji (code > U+1FFF), les accents, garde A-Z 0-9
+  let r = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c > 0x1FFF) continue;           // emoji / symboles hauts
+    if (c >= 0xD800 && c <= 0xDFFF) continue; // surrogates
+    r += s[i];
   }
-  return '';
+  return r
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')    // accents combining
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function buildIndex(md) {
+  const lines = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  _SECTIONS  = {};
+  _SEC_HEADS = {};
+  let head = null, body = [];
+
+  for (const line of lines) {
+    if (/^## /.test(line) && !line.startsWith('### ')) {
+      if (head !== null) {
+        _SECTIONS[normalizeKey(head)]  = body;
+        _SEC_HEADS[normalizeKey(head)] = head;
+      }
+      head = line;
+      body = [];
+    } else if (head !== null) {
+      body.push(line);
+    }
+  }
+  if (head !== null) {
+    _SECTIONS[normalizeKey(head)]  = body;
+    _SEC_HEADS[normalizeKey(head)] = head;
+  }
+  console.debug('[Dashboard] sections trouvées :', Object.values(_SEC_HEADS));
+}
+
+function getLines(keyword) {
+  const kw = normalizeKey(keyword);
+  for (const [k, lines] of Object.entries(_SECTIONS)) {
+    if (k.includes(kw)) return lines;
+  }
+  console.warn('[Dashboard] section introuvable :', keyword, '→ clé recherchée :', kw);
+  console.debug('[Dashboard] clés disponibles :', Object.keys(_SECTIONS));
+  return [];
+}
+
+// Compat helper : retourne une chaîne + header
+function getSectionStr(keyword) {
+  const lines = getLines(keyword);
+  return lines.join('\n');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -608,130 +657,112 @@ async function fetchMD(cfg) {
    PARSERS
 ═══════════════════════════════════════════════════════ */
 
-/* ── INBOX ── */
-function parseInbox(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*📥\s*INBOX\b/im,
-    /^#{1,3}\s*INBOX\b/im,
-  ]);
-  if (!sec) return [];
+/* ══════════════════════════════════════════════════════
+   PARSERS — utilisent getLines(), sans argument md
+══════════════════════════════════════════════════════ */
 
+/* ── INBOX ── */
+function parseInbox() {
+  const lines = getLines('INBOX');
+  if (!lines.length) return [];
+
+  const text   = lines.join('\n');
+  const blocks = text.split(/^---$/m).map(b => b.trim()).filter(Boolean);
   const entities = [];
-  const blocks = sec.split(/^---$/m).map(b => b.trim()).filter(Boolean);
 
   for (const block of blocks) {
-    // ### 📅 ÉVÉNEMENT — Titre  ou  ### ✅ TÂCHE — Titre
-    const headM = block.match(/^###\s+(.+?)(?:\s+[—\-–]\s*)(.+)$/m);
+    const headM = block.match(/^###\s+(.+?)\s+[—\-–]\s*(.+)$/m);
     if (!headM) continue;
 
     const type  = headM[1].trim();
     const title = headM[2].trim();
 
-    // Parse tableau Markdown : | Clé | Valeur |
     const fields = {};
     for (const row of block.matchAll(/^\|\s*([^|\-][^|]*?)\s*\|\s*([^|]+?)\s*\|/gm)) {
-      const key = row[1].replace(/[\u{1F300}-\u{1FFFF}]/gu, '').trim();
+      const rawKey = row[1]
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u2000-\u2BFF]/g, '')
+        .trim();
       const val = row[2].trim();
-      if (key && val && val !== '...' && !key.startsWith('-')) fields[key] = val;
+      if (rawKey && val && val !== '...' && !rawKey.startsWith('--'))
+        fields[rawKey] = val;
     }
 
-    // Note IA (lignes de blockquote)
     const noteLines = [...block.matchAll(/^>\s*(.+)$/gm)].map(r => r[1]);
     const note = noteLines.join(' ').replace(/💡\s*Note IA\s*:\s*/i, '').trim();
 
-    entities.push({ type, title, fields, note, raw: block });
+    entities.push({ type, title, fields, note });
   }
-
   return entities;
 }
 
 /* ── CALENDRIER ── */
-function parseCalendar(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*📅\s*CALENDRIER\b/im,
-    /^#{1,3}\s*CALENDRIER\b/im,
-  ]);
-  if (!sec) return [];
+function parseCalendar() {
+  const lines = getLines('CALENDRIER');
+  if (!lines.length) return [];
 
   const items = [];
-  for (const line of sec.split('\n')) {
-    // Supporte : - **2026-03-15** : Label | ... ou - **2026-03-15**: Label
+  for (const line of lines) {
     const m = line.match(/^\s*-\s*\*\*(\d{4}-\d{2}-\d{2})\*\*\s*:?\s*(.+)$/);
     if (!m) continue;
 
     const isoDate = m[1];
-    const rest    = m[2].trim();
-    // Nettoie les éventuels italiques *...*
-    const clean   = rest.replace(/\*([^*]+)\*/g, '$1');
-    const parts   = clean.split('|').map(p => p.trim()).filter(Boolean);
+    const rest    = m[2].trim().replace(/\*([^*]+)\*/g, '$1');
+    const parts   = rest.split('|').map(p => p.trim()).filter(Boolean);
 
     const label   = parts[0] || '';
-    const people  = parts.slice(1).find(p => !p.startsWith('#') && !p.match(/^\[.+\]$/)) || '';
+    const people  = parts.slice(1).find(p => p && !p.startsWith('#') && !/^\[.+\]$/.test(p)) || '';
     const tags    = parts.filter(p => p.startsWith('#')).join(' ');
-    const statusRaw = parts.find(p => /^\[.+\]$/.test(p)) || '';
-    const status  = statusRaw.replace(/[\[\]]/g, '');
+    const statusR = parts.find(p => /^\[.+\]$/.test(p)) || '';
+    const status  = statusR.replace(/[\[\]]/g, '');
 
     const d = parseDate(isoDate);
-    if (!d) continue;
+    if (!d || !label) continue;
     const diff = dateDiff(d);
-    // Fenêtre : 14 jours passés → 60 jours à venir
     if (diff < -14 || diff > 60) continue;
-    if (!label) continue;
 
     items.push({ isoDate, label, people, tags, status, diff });
   }
-
   return items.sort((a, b) => a.diff - b.diff);
 }
 
 /* ── PROJETS ── */
-function parseProjects(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*📁\s*PROJETS\s+ACTIFS\b/im,
-    /^#{1,3}\s*PROJETS\s+ACTIFS\b/im,
-    /^#{1,3}\s*PROJETS\b/im,
-  ]);
-  if (!sec) return [];
+function parseProjects() {
+  const lines = getLines('PROJETS');
+  if (!lines.length) return [];
 
   const projects = [];
-  // Chaque projet commence par ### Nom
-  const blocks = sec.split(/^###\s+/m).slice(1);
+  let name = null, items = [];
 
-  for (const block of blocks) {
-    const lines = block.split('\n').filter(l => l.trim());
-    const name  = lines[0].trim();
-    const items = [];
-
-    for (const line of lines.slice(1)) {
-      // - Clé : Valeur
+  for (const line of lines) {
+    if (/^### /.test(line)) {
+      if (name) projects.push({ name, items });
+      name  = line.replace(/^###\s+/, '').trim();
+      items = [];
+    } else if (name) {
       const m = line.match(/^\s*-\s*(.+?)\s*:\s*(.+)$/);
-      if (m) items.push({ key: m[1].trim(), val: m[2].trim() });
-      // ligne simple sans ":"
-      else {
+      if (m) {
+        items.push({ key: m[1].trim(), val: m[2].trim() });
+      } else {
         const s = line.match(/^\s*-\s*(.+)$/);
         if (s) items.push({ key: '', val: s[1].trim() });
       }
     }
-
-    if (name) projects.push({ name, items });
   }
-
+  if (name) projects.push({ name, items });
   return projects;
 }
 
 /* ── TÂCHES ── */
-function parseTasks(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*✅\s*TÂCHES\b/im,
-    /^#{1,3}\s*TÂCHES\b/im,
-    /^#{1,3}\s*TACHES\b/im,
-  ]);
-  if (!sec) return [];
+function parseTasks() {
+  // Section "TÂCHES EN COURS" → normalizeKey → "TACHES EN COURS" → contient "TACHES"
+  const lines = getLines('TACHES');
+  if (!lines.length) return [];
 
   const tasks = [];
-  for (const line of sec.split('\n')) {
+  for (const line of lines) {
     const m = line.match(/^\s*-\s*(.+)$/);
-    if (!m) continue;
+    if (!m || m[1].startsWith('*')) continue;
     const parts  = m[1].split('|').map(p => p.trim());
     const label  = parts[0];
     const status = (parts.find(p => /^\[.+\]$/.test(p)) || '').replace(/[\[\]]/g, '');
@@ -743,17 +774,14 @@ function parseTasks(md) {
 }
 
 /* ── ROUTINES ── */
-function parseRoutines(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*🎯\s*ROUTINES\b/im,
-    /^#{1,3}\s*ROUTINES\b/im,
-  ]);
-  if (!sec) return [];
+function parseRoutines() {
+  const lines = getLines('ROUTINES');
+  if (!lines.length) return [];
 
   const routines = [];
-  for (const line of sec.split('\n')) {
+  for (const line of lines) {
     const m = line.match(/^\s*-\s*(.+)$/);
-    if (!m) continue;
+    if (!m || m[1].startsWith('*')) continue;
     const parts  = m[1].split('|').map(p => p.trim());
     const label  = parts[0];
     const freq   = parts[1] || '';
@@ -766,70 +794,64 @@ function parseRoutines(md) {
 }
 
 /* ── RÉSEAU ── */
-function parseNetwork(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*👥\s*RÉSEAU\s*&\s*CONTACTS\b/im,
-    /^#{1,3}\s*RÉSEAU\s*[&et]+\s*CONTACTS\b/im,
-    /^#{1,3}\s*RÉSEAU\b/im,
-  ]);
-  if (!sec) return [];
+function parseNetwork() {
+  // "RÉSEAU & CONTACTS" → "RESEAU CONTACTS" → contient "RESEAU"
+  const lines = getLines('RESEAU');
+  if (!lines.length) return [];
 
   const contacts = [];
-  for (const line of sec.split('\n')) {
-    // - **Nom** | champ | champ
+  for (const line of lines) {
     const m = line.match(/^\s*-\s*\*\*(.+?)\*\*\s*\|(.+)$/);
     if (!m) continue;
     const name  = m[1].trim();
     const parts = m[2].split('|').map(p => p.trim());
 
     const lastM = parts.find(p => /dernier contact/i.test(p));
-    const freqM = parts.find(p => /fréquence/i.test(p));
+    const freqM = parts.find(p => /fr.quence/i.test(p));
     const tags  = parts.filter(p => p.startsWith('#')).join(' ');
-    const role  = parts.find(p =>
-      p && !p.startsWith('#') &&
-      !/dernier|fréquence/i.test(p)
-    ) || '';
+    const role  = parts.find(p => p && !p.startsWith('#') && !/dernier|fr.quence/i.test(p)) || '';
 
-    const last = lastM
-      ? lastM.replace(/dernier contact\s*:\s*/i, '').trim()
-      : '—';
-    const freq = freqM
-      ? freqM.replace(/fréquence souhaitée\s*:\s*/i, '').trim()
-      : '';
-
-    contacts.push({ name, last, freq, role, tags });
+    contacts.push({
+      name,
+      last : lastM ? lastM.replace(/.*:\s*/,'').trim() : '—',
+      freq : freqM ? freqM.replace(/.*:\s*/,'').trim() : '',
+      role, tags,
+    });
   }
   return contacts;
 }
 
 /* ── RÉFLEXIONS ── */
-function parseReflections(md) {
-  const sec = extractSection(md, [
-    /^#{1,3}\s*🧠\s*RÉFLEXIONS\s+OUVERTES\b/im,
-    /^#{1,3}\s*RÉFLEXIONS\s+OUVERTES\b/im,
-    /^#{1,3}\s*RÉFLEXIONS\b/im,
-  ]);
-  if (!sec) return [];
+function parseReflections() {
+  const lines = getLines('REFLEXIONS');
+  if (!lines.length) return [];
 
   const reflects = [];
-  const blocks = sec.split(/^###\s+/m).slice(1);
+  let title = null, fields = {};
 
-  for (const block of blocks) {
-    const lines  = block.split('\n');
-    const title  = lines[0].trim();
-    const fields = {};
+  const flush = () => {
+    if (!title) return;
+    const tagsRaw = fields['Tags'] || fields['tags'] || '';
+    const tags    = tagsRaw.split(/[,\s]+/).map(t=>t.trim()).filter(t=>t.startsWith('#'));
+    const revue   = Object.entries(fields).find(([k])=>/revue/i.test(k))?.[1] || '';
+    reflects.push({ title, fields: { ...fields }, tags, revue });
+    title = null; fields = {};
+  };
 
-    for (const line of lines.slice(1)) {
+  for (const line of lines) {
+    if (/^### /.test(line)) {
+      flush();
+      title = line.replace(/^###\s+/,'').trim();
+    } else if (title) {
       const m = line.match(/^\s*-\s*(.+?)\s*:\s*(.+)$/);
       if (m) fields[m[1].trim()] = m[2].trim();
+      else {
+        const s = line.match(/^\s*-\s*(.+)$/);
+        if (s) fields['_items'] = (fields['_items']||'') + (fields['_items']?'\n':'') + s[1].trim();
+      }
     }
-
-    const tagsRaw = fields['Tags'] || fields['tags'] || '';
-    const tags    = tagsRaw.split(/[,\s]+/).map(t => t.trim()).filter(t => t.startsWith('#'));
-    const revue   = fields['Revue suggérée'] || fields['Revue'] || '';
-
-    if (title) reflects.push({ title, fields, tags, revue, raw: block });
   }
+  flush();
   return reflects;
 }
 
@@ -1081,13 +1103,15 @@ async function load() {
 
     $('loader-text').textContent = 'Analyse du Markdown…';
 
-    const inbox     = parseInbox(md);
-    const calendar  = parseCalendar(md);
-    const projects  = parseProjects(md);
-    const tasks     = parseTasks(md);
-    const routines  = parseRoutines(md);
-    const network   = parseNetwork(md);
-    const reflects  = parseReflections(md);
+    buildIndex(md);
+
+    const inbox     = parseInbox();
+    const calendar  = parseCalendar();
+    const projects  = parseProjects();
+    const tasks     = parseTasks();
+    const routines  = parseRoutines();
+    const network   = parseNetwork();
+    const reflects  = parseReflections();
 
     renderInbox(inbox);
     renderCalendar(calendar);
